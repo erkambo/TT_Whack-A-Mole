@@ -113,7 +113,7 @@ module game_fsm(
 endmodule
 
 // whack a mole module top
-module whack_a_mole(
+module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
     input  wire [7:0]  btn,
