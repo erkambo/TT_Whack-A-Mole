@@ -1,38 +1,38 @@
 `default_nettype none
 `timescale 1ns / 1ps
 
-/* This testbench just instantiates the module and makes some convenient wires
-   that can be driven / tested by the cocotb test.py.
-*/
-module tb ();
+// Cocotb-driven testbench for reaction_game
+module tb();
 
-  // Dump the signals to a VCD file. You can view it with gtkwave or surfer.
+  // Waveform dump
   initial begin
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
-    #1;
   end
 
-  // Wire up the inputs and outputs:
-  reg clk;
-  reg rst_n;
-  reg ena;
-  reg [7:0] ui_in;
-  reg [7:0] uio_in;
-  wire [7:0] uo_out;
-  wire [7:0] uio_out;
-  wire [7:0] uio_oe;
+  // Clock: 50 MHz
+  reg clk = 0;
+  always #10 clk = ~clk;
 
-  // Replace tt_um_example with your module name:
-  tt_um_example user_project (
-      .ui_in  (ui_in),    // Dedicated inputs
-      .uo_out (uo_out),   // Dedicated outputs
-      .uio_in (uio_in),   // IOs: Input path
-      .uio_out(uio_out),  // IOs: Output path
-      .uio_oe (uio_oe),   // IOs: Enable path (active high: 0=input, 1=output)
-      .ena    (ena),      // enable - goes high when design is selected
-      .clk    (clk),      // clock
-      .rst_n  (rst_n)     // not reset
+  // DUT inputs: let cocotb manage reset and stimulus
+  reg rst_n = 1;
+  reg [7:0] btn = 8'd0;
+  reg       game_end = 1'b0;
+
+  // DUT outputs
+  wire [6:0] seg;
+  wire        dp;
+  wire [7:0]  led_score;
+
+  // Instantiate the reaction_game
+  whack_a_mole dut (
+    .clk        (clk),
+    .rst_n      (rst_n),
+    .btn        (btn),
+    .game_end   (game_end),
+    .seg        (seg),
+    .dp         (dp),
+    .led_score  (led_score)
   );
 
 endmodule
