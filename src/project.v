@@ -112,7 +112,7 @@ module game_fsm(
     end
 endmodule
 
-// whack a mole module top level
+// whack a mole module top
 module whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
