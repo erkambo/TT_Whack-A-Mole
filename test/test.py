@@ -70,7 +70,7 @@ async def test_no_increment_on_wrong(dut):
     
 @cocotb.test()
 async def test_game_end_display(dut):
-    """When game_end=1, the 7-segment shows the lower hex digit of the score."""
+    """Test that the 7-segment display shows the correct active segment pattern during gameplay."""
     cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
@@ -86,29 +86,19 @@ async def test_game_end_display(dut):
     score = dut.uio_out.value.integer
     assert score == 2, f"Expected internal score 2, got {score}"
 
-    # Note: Since game_end is now internal and always 0, this test needs modification
-    # For now, we'll test that the display shows the correct pattern for score 2
+    # Wait for the next active segment to appear
     await RisingEdge(dut.clk)
     await Timer(1, units='ns')
 
-    # Map hex digit to segment pattern
-    patterns = {
-        0: 0b1000000,
-        1: 0b1111001,
-        2: 0b0100100,
-        3: 0b0110000,
-        4: 0b0011001,
-        5: 0b0010010,
-        6: 0b0000010,
-        7: 0b1111000,
-        8: 0b0000000,
-        9: 0b0010000,
-    }
-    expected = patterns.get(score & 0xF)
+    # Check that the display shows an active segment pattern (one bit should be 0)
     seg_val = dut.uo_out.value.integer & 0x7F
-    dp = (dut.uo_out.value.integer >> 7) & 1  # Decimal point is bit 7
-    assert expected is not None, f"No pattern for score {score}"
-    assert seg_val == expected, (
-        f"7-seg mismatch: expected 0b{expected:07b}, got 0b{seg_val:07b}"
-    )
+    dp = (dut.uo_out.value.integer >> 7) & 1
+    
+    # During gameplay (game_end=0), exactly one segment should be active (0)
+    active_segments = [i for i in range(7) if ((seg_val >> i) & 1) == 0]
+    assert len(active_segments) == 1, f"Expected exactly one active segment, got {len(active_segments)}: {active_segments}"
     assert dp == 1, f"Expected dp=1 (game running), got {dp}"
+    
+    # Verify the active segment is valid (0-6)
+    active_idx = active_segments[0]
+    assert 0 <= active_idx <= 6, f"Active segment index {active_idx} is out of range [0-6]"
