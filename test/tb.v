@@ -24,7 +24,7 @@ module tb();
   wire [7:0]  led_score;
   wire       game_end;
 
-  // Instantiate the reaction_game
+  // Instantiate the whack-a-mole game
   whack_a_mole dut (
     .clk        (clk),
     .rst_n      (rst_n),
