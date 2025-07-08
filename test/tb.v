@@ -25,7 +25,7 @@ module tb();
   wire       game_end;
 
   // Instantiate the whack-a-mole game
-  whack_a_mole dut (
+  tt_um_whack_a_mole dut (
     .clk        (clk),
     .rst_n      (rst_n),
     .btn        (btn),
