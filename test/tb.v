@@ -1,7 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
 
-// Cocotb-driven testbench for tt_um_whack_a_mole
+// Cocotb-driven testbench for reaction_game
 module tb();
 
   // Waveform dump
@@ -10,31 +10,28 @@ module tb();
     $dumpvars(0, tb);
   end
 
-  // Clock: 50 MHz
+  // Clock: 1 MHz
   reg clk = 0;
-  always #10 clk = ~clk;
+  always #500 clk = ~clk;
 
   // DUT inputs: let cocotb manage reset and stimulus
   reg rst_n = 1;
-  reg [7:0] ui_in = 8'd0;    // Dedicated inputs (buttons)
-  reg [7:0] uio_in = 8'd0;   // IOs: Input path
-  reg ena = 1'b1;            // Enable signal
+  reg [7:0] btn = 8'd0;
 
   // DUT outputs
-  wire [7:0] uo_out;         // Dedicated outputs (7-segment display)
-  wire [7:0] uio_out;        // IOs: Output path (score LEDs)
-  wire [7:0] uio_oe;         // IOs: Enable path
+  wire [6:0] seg;
+  wire        dp;
+  wire [7:0]  led_score;
+  wire       game_end;
 
-  // Instantiate the tt_um_whack_a_mole
-  tt_um_whack_a_mole dut (
-    .ui_in      (ui_in),
-    .uo_out     (uo_out),
-    .uio_in     (uio_in),
-    .uio_out    (uio_out),
-    .uio_oe     (uio_oe),
-    .ena        (ena),
+  // Instantiate the reaction_game
+  whack_a_mole dut (
     .clk        (clk),
-    .rst_n      (rst_n)
+    .rst_n      (rst_n),
+    .btn        (btn),
+    .seg        (seg),
+    .dp         (dp),
+    .led_score  (led_score)
   );
 
 endmodule
