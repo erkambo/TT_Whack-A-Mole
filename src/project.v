@@ -228,20 +228,18 @@ module enhanced_pattern_gen(
         count = 0;
         
         // Use random bits to set exactly num_lit bits
-        for (i = 0; i < 7 && count < num_lit; i = i + 1) begin
-            if (random_bits[i] || (count < num_lit && i >= 6)) begin
+        for (i = 0; i < 7; i = i + 1) begin
+            if (count < num_lit && (random_bits[i] || i >= 6)) begin
                 pattern[i] = 1'b1;
                 count = count + 1;
             end
         end
         
         // Ensure we have exactly num_lit bits set
-        if (count < num_lit) begin
-            for (i = 0; i < 7 && count < num_lit; i = i + 1) begin
-                if (!pattern[i]) begin
-                    pattern[i] = 1'b1;
-                    count = count + 1;
-                end
+        for (i = 0; i < 7; i = i + 1) begin
+            if (count < num_lit && !pattern[i]) begin
+                pattern[i] = 1'b1;
+                count = count + 1;
             end
         end
     end
