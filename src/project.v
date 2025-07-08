@@ -249,6 +249,7 @@ endmodule
 module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
+    input  wire        ena,
     input  wire [7:0]  btn,
     output wire [6:0]  seg,
     output wire        dp,

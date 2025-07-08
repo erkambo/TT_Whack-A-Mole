@@ -16,6 +16,7 @@ module tb();
 
   // DUT inputs: let cocotb manage reset and stimulus
   reg rst_n = 1;
+  reg ena = 1;
   reg [7:0] btn = 8'd0;
 
   // DUT outputs
@@ -28,6 +29,7 @@ module tb();
   tt_um_whack_a_mole dut (
     .clk        (clk),
     .rst_n      (rst_n),
+    .ena        (ena),
     .btn        (btn),
     .seg        (seg),
     .dp         (dp),
