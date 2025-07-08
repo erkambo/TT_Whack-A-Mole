@@ -248,7 +248,7 @@ module enhanced_pattern_gen(
 endmodule
 
 // Top-level: tie RNG, FSM, timer, and 7-seg driver together
-module whack_a_mole(
+module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
     input  wire [7:0]  btn,
