@@ -250,12 +250,11 @@ module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
     input  wire        ena,
-    input  wire [7:0]  btn,
-    output wire [6:0]  seg,
-    output wire        dp,
-    output wire [7:0]  led_score,
-    output wire        game_end,
-    output wire [6:0]  pattern_latched
+    input  wire [7:0]  ui_in,
+    output wire [7:0]  uo_out,
+    input  wire [7:0]  uio_in,
+    output wire [7:0]  uio_out,
+    input  wire [7:0]  uio_oe
 );
     wire [2:0] rand_seg;
     wire [2:0] segment_select;
@@ -270,6 +269,18 @@ module tt_um_whack_a_mole(
     wire [6:0]  pattern;
     reg  [2:0]  num_lit;
     wire [6:0] pattern_latched_w;
+    wire [7:0] btn;
+    wire [6:0] seg;
+    wire dp;
+    wire [7:0] led_score;
+    wire game_end;
+    wire [6:0] pattern_latched;
+
+    // Map Tiny Tapeout ports to game signals
+    assign btn = ui_in;
+    assign uo_out = {1'b0, seg};  // 7-segment display on uo_out[6:0]
+    assign uio_out = led_score;    // Score on uio_out
+    assign pattern_latched = pattern_latched_w;
 
     assign btn_sync   = btn & ~lockout;
     assign led_score  = score;
