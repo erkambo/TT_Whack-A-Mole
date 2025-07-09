@@ -15,7 +15,7 @@ async def wait_active(dut, max_cycles=20):
     """Wait until a segment lights (one seg bit == 0), return its index."""
     for _ in range(max_cycles):
         await RisingEdge(dut.clk)
-        seg_val = dut.uo_out.value.integer & 0x7F  # Extract 7-segment display from uo_out[6:0]
+        seg_val = dut.uo_out.value.integer & 0x7F
         zeros = [i for i in range(7) if ((seg_val >> i) & 1) == 0]
         if zeros:
             return zeros[0]
@@ -25,7 +25,7 @@ async def wait_pattern(dut, min_lit=1):
     """Wait for a pattern with at least min_lit bits set, return the pattern."""
     for _ in range(1000):
         await RisingEdge(dut.clk)
-        pattern = dut.dut.pattern.value.integer
+        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if bin(pattern).count('1') >= min_lit:
             return pattern
     raise TestFailure(f"No pattern with at least {min_lit} bits set found.")
@@ -35,7 +35,7 @@ async def play_to_score(dut, target_score):
     while dut.uio_out.value.integer < target_score:
         # Wait for a pattern
         await RisingEdge(dut.clk)
-        pattern = dut.dut.pattern.value.integer
+        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if pattern == 0:
             continue
         # Press all lit buttons
@@ -49,7 +49,7 @@ async def wait_for_pattern_change(dut, old_pattern):
     """Wait until the pattern changes from old_pattern."""
     for _ in range(1000):
         await RisingEdge(dut.clk)
-        new_pattern = dut.dut.pattern.value.integer
+        new_pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if new_pattern != old_pattern and new_pattern != 0:
             return new_pattern
     raise TestFailure("Pattern did not change after correct press.")
@@ -77,7 +77,7 @@ async def press_pattern(dut, pattern, hold_cycles=5):
 @cocotb.test()
 async def test_score_increment(dut):
     """Pressing the active segment button increments the score."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
 
@@ -96,7 +96,7 @@ async def test_score_increment(dut):
 @cocotb.test()
 async def test_no_increment_on_wrong(dut):
     """Pressing a non-active button does not change the score."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
 
     dut.ui_in.value = 0
     await reset_dut(dut)
@@ -106,7 +106,7 @@ async def test_no_increment_on_wrong(dut):
         await RisingEdge(dut.clk)
 
     # Identify active segment
-    seg_val = dut.uo_out.value.integer & 0x7F  # Extract 7-segment display from uo_out[6:0]
+    seg_val = dut.uo_out.value.integer & 0x7F
     active_idx = next(i for i in range(7) if ((seg_val >> i) & 1) == 0)
     # Choose a different button (wrap-around to bit 7 if necessary)
     wrong_idx = (active_idx + 1) % 8
@@ -126,7 +126,7 @@ async def test_no_increment_on_wrong(dut):
 async def test_game_end_display(dut):
     """When game_end=1, the 7-segment shows the lower hex digit of the score."""
     print('DUT attributes:', dir(dut))
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
     # Play two correct rounds to get score=2
@@ -152,8 +152,8 @@ async def test_game_end_display(dut):
         await wait_some_cycles(dut, 3)
     score = dut.uio_out.value.integer
     assert score == 2, f"Expected internal score 2, got {score}"
-    # Wait for game_end to be asserted by timer (60,000 cycles at 1MHz = 60ms)
-    for _ in range(100000):  # Wait for 60ms game timer
+    # Wait for game_end to be asserted by timer
+    for _ in range(100000):
         await RisingEdge(dut.clk)
         if dut.dut.game_end.value == 1:
             break
@@ -173,8 +173,8 @@ async def test_game_end_display(dut):
         9: 0b0010000,
     }
     expected = patterns.get(score & 0xF)
-    seg_val = dut.uo_out.value.integer & 0x7F  # Extract 7-segment display from uo_out[6:0]
-    dp = (dut.uo_out.value.integer >> 7) & 1  # Extract decimal point from uo_out[7]
+    seg_val = dut.uo_out.value.integer & 0x7F
+    dp = (dut.uo_out.value.integer >> 7) & 1
     assert expected is not None, f"No pattern for score {score}"
     assert seg_val == expected, (
         f"7-seg mismatch: expected 0b{expected:07b}, got 0b{seg_val:07b}"
@@ -184,7 +184,7 @@ async def test_game_end_display(dut):
 @cocotb.test()
 async def test_multi_segment_score(dut):
     """Score only increments when all lit buttons are pressed (multi-segment pattern)."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
     await play_to_score(dut, 5)  # Enter multi-segment mode
@@ -213,7 +213,7 @@ async def test_multi_segment_score(dut):
 @cocotb.test()
 async def test_partial_press_no_score(dut):
     """Partial press of lit buttons does not increment score."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
     await play_to_score(dut, 5)
@@ -233,17 +233,11 @@ async def test_partial_press_no_score(dut):
 @cocotb.test()
 async def test_wrong_press_lockout(dut):
     """Pressing a button not in the pattern triggers lockout."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
     await play_to_score(dut, 5)
-    # Wait for FSM's latched pattern
-    for _ in range(1000):
-        await RisingEdge(dut.clk)
-        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
-        if bin(pattern).count('1') >= 2:
-            break
-    await wait_some_cycles(dut, 3)
+    pattern = await wait_pattern(dut, min_lit=2)
     # Find a button not in the pattern
     for i in range(7):
         if not ((pattern >> i) & 1):
@@ -262,13 +256,13 @@ async def test_wrong_press_lockout(dut):
 @cocotb.test()
 async def test_pattern_timeout(dut):
     """If round timer expires, pattern changes and score does not increment."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
     dut.ui_in.value = 0
     await reset_dut(dut)
     await play_to_score(dut, 5)
     pattern = await wait_pattern(dut, min_lit=2)
-    # Wait for round timer to expire (5,000 cycles for score 5 at 1MHz)
-    for _ in range(10000):  # Add some margin for 1MHz clock
+    # Wait for round timer to expire (50,000 cycles for score 5)
+    for _ in range(60000):  # Add some margin
         await RisingEdge(dut.clk)
         if dut.dut.round_expired.value == 1:
             break

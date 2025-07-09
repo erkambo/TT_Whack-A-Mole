@@ -1,50 +1,26 @@
 `default_nettype none
 
-// Enhanced RNG: Multiple LFSRs with external entropy for true randomness
-module enhanced_rng(
+// Barebones RNG: 3-bit LFSR for segment selection
+module rng_lfsr(
     input  wire       clk,
     input  wire       rst_n,
-    input  wire [7:0] btn,
-    input  wire [15:0] timer_count,
     output reg [2:0]  rand_seg
 );
-    // Multiple LFSRs for better randomness
-    reg [15:0] lfsr1, lfsr2;
-    reg [7:0]  entropy_reg;
-    reg [23:0] combined_state;
-    
-    // Maximal-length LFSR feedback polynomials
-    wire feedback1 = lfsr1[15] ^ lfsr1[14] ^ lfsr1[13] ^ lfsr1[4];  // 16-bit maximal
-    wire feedback2 = lfsr2[15] ^ lfsr2[13] ^ lfsr2[12] ^ lfsr2[10];  // Different taps
-    
-    // External entropy from button presses and timer
-    wire [15:0] external_entropy = {btn, timer_count[7:0]};
-    
+    reg [15:0] lfsr;
+    wire feedback = lfsr[0] ^ lfsr[2];
+
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            lfsr1 <= 16'hACE1;
-            lfsr2 <= 16'hBEEF;
-            entropy_reg <= 8'h00;
-            combined_state <= 24'h0;
-        end else begin
-            // Update LFSRs
-            lfsr1 <= {lfsr1[14:0], feedback1};
-            lfsr2 <= {lfsr2[14:0], feedback2};
-            
-            // Collect external entropy
-            entropy_reg <= entropy_reg ^ btn;
-            
-            // Combine all sources for final random number
-            combined_state <= {lfsr1[7:0], lfsr2[7:0], entropy_reg} ^ {external_entropy, 8'h0};
-        end
+        if (!rst_n)
+            lfsr <= 16'hACE1;
+        else
+            lfsr <= {lfsr[14:0], feedback};
     end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             rand_seg <= 3'd0;
         else
-            // Ensure we get a valid segment (0-6)
-            rand_seg <= combined_state[2:0] % 7;
+            rand_seg <= lfsr[2:0];
     end
 endmodule
 
@@ -168,9 +144,7 @@ module round_timer(
     output wire        expired
 );
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            count <= preset;
-        end else if (reset_round) begin
+        if (!rst_n || reset_round) begin
             count <= preset;
         end else if (enable && count != 16'd0) begin
             count <= count - 1'b1;
@@ -179,67 +153,35 @@ module round_timer(
     assign expired = (count == 16'd0);
 endmodule
 
-// Enhanced pattern generator: truly random patterns with multiple entropy sources
-module enhanced_pattern_gen(
+// Pattern generator: generates a random 7-bit pattern with N bits set
+module pattern_gen(
     input  wire        clk,
     input  wire        rst_n,
-    input  wire [7:0]  btn,
-    input  wire [15:0] timer_count,
+    input  wire [15:0] seed,
     input  wire [2:0]  num_lit,
     output reg  [6:0]  pattern
 );
-    // Multiple entropy sources for true randomness
-    reg [15:0] lfsr1, lfsr2;
-    reg [7:0]  entropy_reg;
-    reg [23:0] combined_entropy;
-    reg [6:0]  random_bits;
-    
-    // Different maximal-length LFSR configurations
-    wire feedback1 = lfsr1[15] ^ lfsr1[14] ^ lfsr1[13] ^ lfsr1[4];
-    wire feedback2 = lfsr2[15] ^ lfsr2[13] ^ lfsr2[12] ^ lfsr2[10];
-    
-    // External entropy sources
-    wire [15:0] external_entropy = {btn, timer_count[7:0]};
-    
+    // Simple LFSR-based pattern generator
+    reg [15:0] lfsr;
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            lfsr1 <= 16'hFACE;
-            lfsr2 <= 16'hCAFE;
-            entropy_reg <= 8'h00;
-            combined_entropy <= 24'h0;
-            random_bits <= 7'h0;
-        end else begin
-            // Update LFSRs
-            lfsr1 <= {lfsr1[14:0], feedback1};
-            lfsr2 <= {lfsr2[14:0], feedback2};
-            
-            // Collect external entropy
-            entropy_reg <= entropy_reg ^ btn;
-            
-            // Combine all entropy sources
-            combined_entropy <= {lfsr1[7:0], lfsr2[7:0], entropy_reg} ^ {external_entropy, 8'h0};
-            
-            // Generate random bits for pattern
-            random_bits <= combined_entropy[6:0] ^ {combined_entropy[15:9]};
-        end
+        if (!rst_n)
+            lfsr <= seed;
+        else
+            lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ lfsr[12] ^ lfsr[10]};
     end
-    
     integer i, count;
     always @(*) begin
         pattern = 7'b0;
         count = 0;
-        
-        // Use random bits to set exactly num_lit bits
         for (i = 0; i < 7; i = i + 1) begin
-            if (count < num_lit && (random_bits[i] || i >= 6)) begin
+            if (lfsr[i] && count < num_lit) begin
                 pattern[i] = 1'b1;
                 count = count + 1;
             end
         end
-        
-        // Ensure we have exactly num_lit bits set
-        for (i = 0; i < 7; i = i + 1) begin
-            if (count < num_lit && !pattern[i]) begin
+        // If not enough bits set, fill from LSB up
+        for (i = 0; i < 7 && count < num_lit; i = i + 1) begin
+            if (!pattern[i]) begin
                 pattern[i] = 1'b1;
                 count = count + 1;
             end
@@ -251,7 +193,7 @@ endmodule
 module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
-    input  wire        ena,      // Enable signal - now properly used
+    input  wire        ena,
     input  wire [7:0]  ui_in,
     output wire [7:0]  uo_out,
     input  wire [7:0]  uio_in,
@@ -300,7 +242,6 @@ module tt_um_whack_a_mole(
         else
             round_preset = 16'd2000; // 2ms at 1MHz
     end
-    
     // Variable difficulty: increase number of lit segments as score increases
     always @(*) begin
         if (score < 8'd5)
@@ -313,21 +254,18 @@ module tt_um_whack_a_mole(
             num_lit = 3'd4;
     end
 
-    enhanced_rng    rng_inst(
-        .clk         (clk),
-        .rst_n       (effective_rst_n),  // Use effective reset
-        .btn         (btn),
-        .timer_count (timer_count),
-        .rand_seg    (rand_seg)
+    rng_lfsr    rng_inst(
+        .clk       (clk),
+        .rst_n     (effective_rst_n),
+        .rand_seg  (rand_seg)
     );
 
-    enhanced_pattern_gen pattern_gen_inst(
-        .clk         (clk),
-        .rst_n       (effective_rst_n),  // Use effective reset
-        .btn         (btn),
-        .timer_count (timer_count),
-        .num_lit     (num_lit),
-        .pattern     (pattern)
+    pattern_gen pattern_gen_inst(
+        .clk     (clk),
+        .rst_n   (effective_rst_n),
+        .seed    (timer_count), // Use timer as seed for variety
+        .num_lit (num_lit),
+        .pattern (pattern)
     );
 
     countdown_timer timer_inst(
@@ -407,8 +345,8 @@ module game_fsm_patterns(
                     if ((btn_sync[6:0] & pattern_latched) == pattern_latched && pattern_latched != 7'b0) begin
                         score_cnt <= score_cnt + 1;
                         state     <= NEXT;
-                    end else if (|(btn_sync[6:0] & ~pattern_latched)) begin
-                        lockout   <= lockout | btn_sync;
+                    end else if (|btn_sync[6:0] & ~pattern_latched) begin
+                        lockout   <= btn_sync;
                         state     <= WAIT;
                     end else if (round_expired) begin
                         state     <= NEXT;
