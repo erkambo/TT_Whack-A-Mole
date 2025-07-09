@@ -251,8 +251,10 @@ endmodule
 module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
+    input  wire        ena,      // Enable signal - now properly used
     input  wire [7:0]  ui_in,
     output wire [7:0]  uo_out,
+    input  wire [7:0]  uio_in,
     output wire [7:0]  uio_out,
     output wire [7:0]  uio_oe
 );
@@ -273,6 +275,10 @@ module tt_um_whack_a_mole(
     wire dp;
     wire [7:0] led_score;
     wire game_end;
+    wire effective_rst_n;
+    
+    // Combine reset and enable - when ena is low, effectively reset the game
+    assign effective_rst_n = rst_n & ena;
 
     // Map Tiny Tapeout ports to game signals
     assign btn = ui_in;
@@ -294,6 +300,7 @@ module tt_um_whack_a_mole(
         else
             round_preset = 16'd2000; // 2ms at 1MHz
     end
+    
     // Variable difficulty: increase number of lit segments as score increases
     always @(*) begin
         if (score < 8'd5)
@@ -308,7 +315,7 @@ module tt_um_whack_a_mole(
 
     enhanced_rng    rng_inst(
         .clk         (clk),
-        .rst_n       (rst_n),
+        .rst_n       (effective_rst_n),  // Use effective reset
         .btn         (btn),
         .timer_count (timer_count),
         .rand_seg    (rand_seg)
@@ -316,7 +323,7 @@ module tt_um_whack_a_mole(
 
     enhanced_pattern_gen pattern_gen_inst(
         .clk         (clk),
-        .rst_n       (rst_n),
+        .rst_n       (effective_rst_n),  // Use effective reset
         .btn         (btn),
         .timer_count (timer_count),
         .num_lit     (num_lit),
@@ -325,8 +332,8 @@ module tt_um_whack_a_mole(
 
     countdown_timer timer_inst(
         .clk    (clk),
-        .rst_n  (rst_n),
-        .enable (!game_end),
+        .rst_n  (effective_rst_n),       // Use effective reset
+        .enable (ena & !game_end),       // Enable only when ena is high
         .preset (16'd60000), // 60ms at 1MHz
         .count  (timer_count),
         .done   (game_end)
@@ -334,8 +341,8 @@ module tt_um_whack_a_mole(
 
     round_timer round_timer_inst(
         .clk         (clk),
-        .rst_n       (rst_n),
-        .enable      (!game_end),
+        .rst_n       (effective_rst_n),  // Use effective reset
+        .enable      (ena & !game_end),  // Enable only when ena is high
         .reset_round (reset_round),
         .preset      (round_preset),
         .count       (round_timer_count),
@@ -345,7 +352,7 @@ module tt_um_whack_a_mole(
     // FSM with pattern and round timer integration
     game_fsm_patterns fsm_inst(
         .clk            (clk),
-        .rst_n          (rst_n),
+        .rst_n          (effective_rst_n),  // Use effective reset
         .pattern        (pattern),
         .btn_sync       (btn_sync),
         .game_end       (game_end),
@@ -357,7 +364,7 @@ module tt_um_whack_a_mole(
     );
 
     seg7_driver_patterns drv_inst(
-        .pattern   (pattern),
+        .pattern   (pattern_latched_w),
         .game_end  (game_end),
         .score     (score),
         .seg       (seg),
