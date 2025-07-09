@@ -173,15 +173,16 @@ module pattern_gen(
     always @(*) begin
         pattern = 7'b0;
         count = 0;
+        // First pass: set bits based on LFSR
         for (i = 0; i < 7; i = i + 1) begin
             if (lfsr[i] && count < num_lit) begin
                 pattern[i] = 1'b1;
                 count = count + 1;
             end
         end
-        // If not enough bits set, fill from LSB up
-        for (i = 0; i < 7 && count < num_lit; i = i + 1) begin
-            if (!pattern[i]) begin
+        // Second pass: fill remaining bits if needed
+        for (i = 0; i < 7; i = i + 1) begin
+            if (count < num_lit && !pattern[i]) begin
                 pattern[i] = 1'b1;
                 count = count + 1;
             end
