@@ -168,7 +168,9 @@ module round_timer(
     output wire        expired
 );
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n || reset_round) begin
+        if (!rst_n) begin
+            count <= preset;
+        end else if (reset_round) begin
             count <= preset;
         end else if (enable && count != 16'd0) begin
             count <= count - 1'b1;
@@ -249,15 +251,12 @@ endmodule
 module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
-    input  wire        ena,
     input  wire [7:0]  ui_in,
     output wire [7:0]  uo_out,
-    input  wire [7:0]  uio_in,
     output wire [7:0]  uio_out,
     output wire [7:0]  uio_oe
 );
     wire [2:0] rand_seg;
-    wire [2:0] segment_select;
     wire [7:0] lockout;
     wire [7:0] score;
     wire [7:0] btn_sync;
@@ -274,13 +273,12 @@ module tt_um_whack_a_mole(
     wire dp;
     wire [7:0] led_score;
     wire game_end;
-    wire [6:0] pattern_latched;
 
     // Map Tiny Tapeout ports to game signals
     assign btn = ui_in;
     assign uo_out = {1'b0, seg};  // 7-segment display on uo_out[6:0]
     assign uio_out = led_score;    // Score on uio_out
-    assign pattern_latched = pattern_latched_w;
+    assign uio_oe = 8'hFF;         // All bidirectional pins as outputs
 
     assign btn_sync   = btn & ~lockout;
     assign led_score  = score;
@@ -357,8 +355,6 @@ module tt_um_whack_a_mole(
         .score_cnt      (score),
         .pattern_latched(pattern_latched_w)
     );
-
-    assign pattern_latched = pattern_latched_w;
 
     seg7_driver_patterns drv_inst(
         .pattern   (pattern),

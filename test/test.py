@@ -134,7 +134,7 @@ async def test_game_end_display(dut):
         # Wait for FSM's latched pattern
         while True:
             await RisingEdge(dut.clk)
-            pattern = dut.dut.pattern_latched.value.integer
+            pattern = dut.dut.fsm_inst.pattern_latched.value.integer
             if pattern != 0:
                 break
         await wait_some_cycles(dut, 3)
@@ -146,7 +146,7 @@ async def test_game_end_display(dut):
         old_pattern = pattern
         for _ in range(1000):
             await RisingEdge(dut.clk)
-            pattern = dut.dut.pattern_latched.value.integer
+            pattern = dut.dut.fsm_inst.pattern_latched.value.integer
             if pattern != old_pattern and pattern != 0:
                 break
         await wait_some_cycles(dut, 3)
@@ -191,7 +191,7 @@ async def test_multi_segment_score(dut):
     # Wait for FSM's latched pattern
     for _ in range(1000):
         await RisingEdge(dut.clk)
-        pattern = dut.dut.pattern_latched.value.integer
+        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if bin(pattern).count('1') >= 2:
             break
     await wait_some_cycles(dut, 3)
@@ -203,7 +203,7 @@ async def test_multi_segment_score(dut):
     old_pattern = pattern
     for _ in range(1000):
         await RisingEdge(dut.clk)
-        pattern = dut.dut.pattern_latched.value.integer
+        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if pattern != old_pattern and pattern != 0:
             break
     await wait_some_cycles(dut, 3)
@@ -240,7 +240,7 @@ async def test_wrong_press_lockout(dut):
     # Wait for FSM's latched pattern
     for _ in range(1000):
         await RisingEdge(dut.clk)
-        pattern = dut.dut.pattern_latched.value.integer
+        pattern = dut.dut.fsm_inst.pattern_latched.value.integer
         if bin(pattern).count('1') >= 2:
             break
     await wait_some_cycles(dut, 3)
