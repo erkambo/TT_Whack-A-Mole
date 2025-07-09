@@ -19,11 +19,11 @@ module tb();
   reg ena = 1;
   reg [7:0] ui_in = 8'd0;
   reg [7:0] uio_in = 8'd0;
-  reg [7:0] uio_oe = 8'd0;
 
   // DUT outputs
   wire [7:0] uo_out;
   wire [7:0] uio_out;
+  wire [7:0] uio_oe;
 
   // Instantiate the whack-a-mole game
   tt_um_whack_a_mole dut (

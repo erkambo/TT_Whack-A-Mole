@@ -254,7 +254,7 @@ module tt_um_whack_a_mole(
     output wire [7:0]  uo_out,
     input  wire [7:0]  uio_in,
     output wire [7:0]  uio_out,
-    input  wire [7:0]  uio_oe
+    output wire [7:0]  uio_oe
 );
     wire [2:0] rand_seg;
     wire [2:0] segment_select;
