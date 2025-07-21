@@ -288,14 +288,14 @@ module tt_um_whack_a_mole(
     );
 
     // per-round timeout
+    wire [15:0] unused_round_count; // Dummy wire for unused output
     round_timer round_timer_inst (
         .clk         (clk),
         .rst_n       (rst_n & ena),
         .enable      (ena && !game_end),
         .reset_round (reset_round),
         .preset      (round_preset),
-        // FIX: The count output of this timer is not used elsewhere, so it is left unconnected.
-        .count       (),
+        .count       (unused_round_count), // Connect unused output
         .expired     (round_expired)
     );
 
