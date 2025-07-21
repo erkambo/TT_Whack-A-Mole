@@ -33,21 +33,21 @@ module round_timer(
     output reg  [15:0] count,
     output wire        expired
 );
-    // Corrected logic for round_timer module
-always @(posedge clk or negedge rst_n) begin
-    // 1. Handle the asynchronous reset first. This happens independently of the clock.
-    if (!rst_n)
-        count <= preset;
-    // 2. All other logic is synchronous and happens only on the positive clock edge.
-    else begin 
-        // The synchronous reset has the highest priority after the async reset.
-        if (reset_round)
+    // Corrected logic for round_timer module with both async and sync reset
+    always @(posedge clk or negedge rst_n) begin
+        // 1. Handle the asynchronous reset first. This happens independently of the clock.
+        if (!rst_n)
             count <= preset;
-        // The main counter logic follows.
-        else if (enable && count != 16'd0)
-            count <= count - 1'b1;
+        // 2. All other logic is synchronous and happens only on the positive clock edge.
+        else begin
+            // The synchronous reset has the highest priority after the async reset.
+            if (reset_round)
+                count <= preset;
+            // The main counter logic follows.
+            else if (enable && count != 16'd0)
+                count <= count - 1'b1;
+        end
     end
-end
     assign expired = (count == 16'd0);
 endmodule
 
@@ -72,8 +72,11 @@ module pattern_gen(
     end
 
     integer i;
-    integer count;
-    // purely combinational pattern‐pick
+    // FIX: Changed 'integer' (32-bit) to a 3-bit reg. 'count' will never exceed 7.
+    // This prevents the synthesizer from creating large, unmappable 32-bit arithmetic units.
+    reg [2:0] count;
+
+    // purely combinational pattern-pick
     always @(*) begin
         pattern = 7'b0;
         count   = 0;
@@ -96,7 +99,7 @@ endmodule
 
 
 // ============================================================================
-// Game FSM for pattern‐pressing
+// Game FSM for pattern-pressing
 // ============================================================================
 module game_fsm_patterns(
     input  wire        clk,
@@ -117,62 +120,62 @@ module game_fsm_patterns(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pattern_latched <= 7'b0;
-            lockout        <= 8'd0;
-            score_cnt      <= 8'd0;
-            state         <= NEXT;
-            reset_round   <= 1'b1;
+            lockout         <= 8'd0;
+            score_cnt       <= 8'd0;
+            state           <= NEXT;
+            reset_round     <= 1'b1;
         end else if (game_end) begin
             // Hold current state when game ends
             pattern_latched <= pattern_latched;
-            lockout        <= lockout;
-            score_cnt      <= score_cnt;
-            state         <= state;
-            reset_round   <= reset_round;
+            lockout         <= lockout;
+            score_cnt       <= score_cnt;
+            state           <= state;
+            reset_round     <= reset_round;
         end else begin
             case (state)
                 NEXT: begin
                     pattern_latched <= pattern;
-                    lockout        <= 8'd0;
-                    reset_round    <= 1'b1;
-                    state         <= WAIT;
-                    score_cnt      <= score_cnt;  // Hold current score
+                    lockout         <= 8'd0;
+                    reset_round     <= 1'b1;
+                    state           <= WAIT;
+                    score_cnt       <= score_cnt;  // Hold current score
                 end
                 WAIT: begin
                     reset_round <= 1'b0;
-                    if ((btn_sync[6:0] & pattern_latched) == pattern_latched && 
+                    if ((btn_sync[6:0] & pattern_latched) == pattern_latched &&
                         (pattern_latched != 7'b0)) begin
                         // Correct pattern pressed
-                        score_cnt      <= score_cnt + 1;
-                        state         <= NEXT;
-                        lockout        <= lockout;
+                        score_cnt       <= score_cnt + 1;
+                        state           <= NEXT;
+                        lockout         <= lockout;
                         pattern_latched <= pattern_latched;
                     end else if (|(btn_sync[6:0] & ~pattern_latched)) begin
                         // Wrong button pressed
-                        lockout        <= btn_sync;
-                        state         <= WAIT;
-                        score_cnt      <= score_cnt;
+                        lockout         <= btn_sync;
+                        state           <= WAIT;
+                        score_cnt       <= score_cnt;
                         pattern_latched <= pattern_latched;
                     end else if (round_expired) begin
                         // Timeout
-                        state         <= NEXT;
-                        lockout        <= lockout;
-                        score_cnt      <= score_cnt;
+                        state           <= NEXT;
+                        lockout         <= lockout;
+                        score_cnt       <= score_cnt;
                         pattern_latched <= pattern_latched;
                     end else begin
                         // Hold all values
-                        state         <= WAIT;
-                        lockout        <= lockout;
-                        score_cnt      <= score_cnt;
+                        state           <= WAIT;
+                        lockout         <= lockout;
+                        score_cnt       <= score_cnt;
                         pattern_latched <= pattern_latched;
                     end
                 end
                 default: begin
                     // Recover to known state
-                    state         <= NEXT;
+                    state           <= NEXT;
                     pattern_latched <= 7'b0;
-                    lockout        <= 8'd0;
-                    score_cnt      <= score_cnt;
-                    reset_round    <= 1'b1;
+                    lockout         <= 8'd0;
+                    score_cnt       <= score_cnt;
+                    reset_round     <= 1'b1;
                 end
             endcase
         end
@@ -234,18 +237,21 @@ module tt_um_whack_a_mole(
     output wire [7:0]  uio_out,
     output wire [7:0]  uio_oe
 );
-    // ----------------------------------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
     // Wires & regs
-    // ----------------------------------------------------------------------------------------------------------------
-    wire [7:0] btn_sync    = ui_in & ~lockout;
+    // ------------------------------------------------------------------------
+    // FIX: 'lockout' must be a wire, as it is driven by an instance output (fsm_inst).
+    // It cannot be a 'reg' in this module.
+    wire [7:0] lockout;
+    wire [7:0] btn_sync        = ui_in & ~lockout;
     wire [7:0] score;
     wire       game_end;
     wire [15:0] timer_count;
-    wire [15:0] timer_round;  // Added for round timer count
-    wire        round_expired;
-    wire        reset_round;
-    wire [6:0]  pattern_latched;
-    wire [6:0]  next_pattern;  // Added for pattern generator output
+    // FIX: Removed unused 'timer_round' wire to clear the linting warning.
+    wire       round_expired;
+    wire       reset_round;
+    wire [6:0] pattern_latched;
+    wire [6:0] next_pattern;
     wire _unused_ok = &{1'b0, uio_in};  // Explicitly mark unused input
 
     // make these pure combinational (no latches)
@@ -259,8 +265,6 @@ module tt_um_whack_a_mole(
                                (score < 8'd20) ? 3'd3 :
                                                  3'd4;
 
-    reg  [7:0] lockout;
-    
     wire [6:0] seg;
     wire       dp;
 
@@ -270,10 +274,10 @@ module tt_um_whack_a_mole(
     assign uio_oe  = 8'hFF;
 
 
-    // ----------------------------------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
     // Instantiations
-    // ----------------------------------------------------------------------------------------------------------------
-    // main game‐end timer
+    // ------------------------------------------------------------------------
+    // main game-end timer
     countdown_timer timer_inst (
         .clk    (clk),
         .rst_n  (rst_n & ena),
@@ -283,18 +287,19 @@ module tt_um_whack_a_mole(
         .done   (game_end)
     );
 
-    // per‐round timeout
+    // per-round timeout
     round_timer round_timer_inst (
         .clk         (clk),
         .rst_n       (rst_n & ena),
         .enable      (ena && !game_end),
         .reset_round (reset_round),
         .preset      (round_preset),
-        .count       (timer_round),
+        // FIX: The count output of this timer is not used elsewhere, so it is left unconnected.
+        .count       (),
         .expired     (round_expired)
     );
 
-    // pattern bit‐generator
+    // pattern bit-generator
     pattern_gen pattern_gen_inst (
         .clk     (clk),
         .rst_n   (rst_n & ena),
@@ -305,15 +310,15 @@ module tt_um_whack_a_mole(
 
     // main FSM: latches the pattern, tracks score & lockout
     game_fsm_patterns fsm_inst (
-        .clk           (clk),
-        .rst_n         (rst_n & ena),
-        .pattern       (next_pattern),  // Use next_pattern instead of direct access
-        .btn_sync      (btn_sync),
-        .game_end      (game_end),
-        .round_expired (round_expired),
-        .reset_round   (reset_round),
-        .lockout       (lockout),
-        .score_cnt     (score),
+        .clk            (clk),
+        .rst_n          (rst_n & ena),
+        .pattern        (next_pattern),
+        .btn_sync       (btn_sync),
+        .game_end       (game_end),
+        .round_expired  (round_expired),
+        .reset_round    (reset_round),
+        .lockout        (lockout),
+        .score_cnt      (score),
         .pattern_latched(pattern_latched)
     );
 
