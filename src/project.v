@@ -44,7 +44,7 @@ endmodule
 
 
 // ============================================================================
-// Pattern Generator: LFSR-based, picks exactly num_lit bits
+// Pattern Generator: LFSR‐based, picks exactly num_lit bits
 // ============================================================================
 module pattern_gen(
     input  wire        clk,
@@ -54,32 +54,27 @@ module pattern_gen(
     output reg  [6:0]  pattern
 );
     reg [15:0] lfsr;
-    // clocked LFSR
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             lfsr <= seed;
         else
-            lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ lfsr[12] ^ lfsr[10]};
+            lfsr <= {lfsr[14:0], lfsr[15]^lfsr[13]^lfsr[12]^lfsr[10]};
     end
 
-    integer i;
-    integer count;
-    // purely combinational pattern‐pick
+    integer i, count;
     always @(*) begin
         pattern = 7'b0;
         count   = 0;
-        // first pass: take bits where LFSR is ‘1’
         for (i = 0; i < 7; i = i + 1) begin
-            if (lfsr[i] && (count < num_lit)) begin
+            if (lfsr[i] && count < num_lit) begin
                 pattern[i] = 1'b1;
-                count      = count + 1;
+                count = count + 1;
             end
         end
-        // second pass: fill remaining if we still need bits
         for (i = 0; i < 7; i = i + 1) begin
-            if ((count < num_lit) && (pattern[i] == 1'b0)) begin
+            if (count < num_lit && pattern[i] == 1'b0) begin
                 pattern[i] = 1'b1;
-                count      = count + 1;
+                count = count + 1;
             end
         end
     end
@@ -122,18 +117,13 @@ module game_fsm_patterns(
 
                 WAIT: begin
                     reset_round <= 1'b0;
-                    // correct = all lit bits pressed
-                    if ( (btn_sync[6:0] & pattern_latched) == pattern_latched
-                         && (pattern_latched != 7'b0) ) begin
+                    if ((btn_sync[6:0] & pattern_latched) == pattern_latched
+                        && pattern_latched != 7'b0) begin
                         score_cnt <= score_cnt + 1;
                         state     <= NEXT;
-
-                    // wrong = any pressed bit not in pattern_latched
-                    end else if ( |(btn_sync[6:0] & ~pattern_latched) ) begin
+                    end else if (|(btn_sync[6:0] & ~pattern_latched)) begin
                         lockout <= btn_sync;
                         state   <= WAIT;
-
-                    // timeout
                     end else if (round_expired) begin
                         state <= NEXT;
                     end
@@ -145,23 +135,21 @@ endmodule
 
 
 // ============================================================================
-// 7-seg Driver: shows pattern or final score
+// 7‐segment Driver: shows pattern or final score (lower hex digit)
 // ============================================================================
 module seg7_driver_patterns(
     input  wire [6:0]  pattern,
     input  wire        game_end,
-    input  wire [7:0]  score,
+    input  wire [3:0]  score_nibble,
     output reg  [6:0]  seg,
     output reg         dp
 );
     always @(*) begin
-        // defaults
-        seg = ~pattern;  // active-low for live game
+        seg = ~pattern;
         dp  = 1'b1;
-
         if (game_end) begin
             dp = 1'b0;
-            case (score[3:0])
+            case (score_nibble)
                 4'h0: seg = 7'b1000000;
                 4'h1: seg = 7'b1111001;
                 4'h2: seg = 7'b0100100;
@@ -186,55 +174,50 @@ endmodule
 
 
 // ============================================================================
-// Top-Level: Tie everything together
+// Core game (with ena port, as requested)
 // ============================================================================
 module tt_um_whack_a_mole(
     input  wire        clk,
     input  wire        rst_n,
     input  wire        ena,
     input  wire [7:0]  ui_in,
-    output wire [7:0]  uo_out,
     input  wire [7:0]  uio_in,
+    output wire [7:0]  uo_out,
     output wire [7:0]  uio_out,
-    output wire [7:0]  uio_oe
+    output wire [7:0]  uio_oe,
+    output wire        game_end,
+    output wire        round_expired,
+    output wire [7:0]  lockout
 );
-    // ----------------------------------------------------------------------------------------------------------------
-    // Wires & regs
-    // ----------------------------------------------------------------------------------------------------------------
-    wire [7:0] btn_sync    = ui_in & ~lockout;
+    wire [7:0] btn_sync        = ui_in & ~lockout;
     wire [7:0] score;
-    wire       game_end;
     wire [15:0] timer_count;
-    wire        round_expired;
+    wire [15:0] round_count;
+    wire [6:0]  generated_pattern;
     wire        reset_round;
-    wire [6:0]  pattern_latched;
+    wire [7:0]  fsm_lockout;
 
-    // make these pure combinational (no latches)
-    wire [15:0] round_preset = (score < 8'd5)  ? 16'd5000 :
-                               (score < 8'd10) ? 16'd4000 :
-                               (score < 8'd20) ? 16'd3000 :
-                                                 16'd2000;
+    // suppress unused uio_in warning
+    wire _unused_uio = &uio_in;
 
-    wire [2:0]  num_lit      = (score < 8'd5)  ? 3'd1 :
-                               (score < 8'd10) ? 3'd2 :
-                               (score < 8'd20) ? 3'd3 :
-                                                 3'd4;
+    // difficulty curves
+    wire [15:0] round_preset = (score <  8'd5)  ? 16'd5000 :
+                               (score <  8'd10) ? 16'd4000 :
+                               (score <  8'd20) ? 16'd3000 :
+                                                   16'd2000;
+    wire [2:0]  num_lit      = (score <  8'd5)  ? 3'd1 :
+                               (score <  8'd10) ? 3'd2 :
+                               (score <  8'd20) ? 3'd3 :
+                                                   3'd4;
 
-    reg  [7:0] lockout;
-    
     wire [6:0] seg;
     wire       dp;
 
-    // display connections
-    assign uo_out  = {dp, seg};
-    assign uio_out = score;
-    assign uio_oe  = 8'hFF;
+    assign lockout       = fsm_lockout;
+    assign uo_out        = {dp, seg};
+    assign uio_out       = score;
+    assign uio_oe        = 8'hFF;
 
-
-    // ----------------------------------------------------------------------------------------------------------------
-    // Instantiations
-    // ----------------------------------------------------------------------------------------------------------------
-    // main game‐end timer
     countdown_timer timer_inst (
         .clk    (clk),
         .rst_n  (rst_n & ena),
@@ -244,47 +227,73 @@ module tt_um_whack_a_mole(
         .done   (game_end)
     );
 
-    // per‐round timeout
     round_timer round_timer_inst (
         .clk         (clk),
         .rst_n       (rst_n & ena),
         .enable      (ena && !game_end),
         .reset_round (reset_round),
         .preset      (round_preset),
-        .count       (/* unused */),
+        .count       (round_count),
         .expired     (round_expired)
     );
 
-    // pattern bit‐generator
     pattern_gen pattern_gen_inst (
         .clk     (clk),
         .rst_n   (rst_n & ena),
         .seed    (timer_count),
         .num_lit (num_lit),
-        .pattern (/* not used here */)
+        .pattern (generated_pattern)
     );
 
-    // main FSM: latches the pattern, tracks score & lockout
     game_fsm_patterns fsm_inst (
+        .clk            (clk),
+        .rst_n          (rst_n & ena),
+        .pattern        (generated_pattern),
+        .btn_sync       (btn_sync),
+        .game_end       (game_end),
+        .round_expired  (round_expired),
+        .reset_round    (reset_round),
+        .lockout        (fsm_lockout),
+        .score_cnt      (score),
+        .pattern_latched()
+    );
+
+    seg7_driver_patterns drv_inst (
+        .pattern      (generated_pattern),
+        .game_end     (game_end),
+        .score_nibble (score[3:0]),
+        .seg          (seg),
+        .dp           (dp)
+    );
+endmodule
+
+
+// ============================================================================
+// Wrapper for cocotb: top‐level is 'dut', instantiates core as instance 'dut'
+// ============================================================================  
+module dut(
+    input  wire        clk,
+    input  wire        rst_n,
+    input  wire [7:0]  ui_in,
+    output wire [7:0]  uo_out,
+    output wire [7:0]  uio_out,
+    output wire [7:0]  uio_oe,
+    output wire        game_end,
+    output wire        round_expired,
+    output wire [7:0]  lockout
+);
+    tt_um_whack_a_mole dut (
         .clk           (clk),
-        .rst_n         (rst_n & ena),
-        .pattern       (pattern_gen_inst.pattern),
-        .btn_sync      (btn_sync),
+        .rst_n         (rst_n),
+        .ena           (1'b1),
+        .ui_in         (ui_in),
+        .uio_in        (8'h00),
+        .uo_out        (uo_out),
+        .uio_out       (uio_out),
+        .uio_oe        (uio_oe),
         .game_end      (game_end),
         .round_expired (round_expired),
-        .reset_round   (reset_round),
-        .lockout       (lockout),
-        .score_cnt     (score),
-        .pattern_latched(pattern_latched)
-    );
-
-    // 7-segment output driver
-    seg7_driver_patterns drv_inst (
-        .pattern  (pattern_latched),
-        .game_end (game_end),
-        .score    (score),
-        .seg      (seg),
-        .dp       (dp)
+        .lockout       (lockout)
     );
 endmodule
 
