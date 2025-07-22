@@ -1,5 +1,33 @@
 `default_nettype none
 
+// Button debouncer module
+module button_debouncer #(
+    parameter DEBOUNCE_CYCLES = 4  // Number of cycles button must be stable
+)(
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       btn_in,    // Raw button input
+    output reg        btn_out    // Debounced output
+);
+    reg [DEBOUNCE_CYCLES-1:0] shift;  // Shift register for debouncing
+    
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            shift <= 0;
+            btn_out <= 1'b0;
+        end else begin
+            // Shift in the new button state
+            shift <= {shift[DEBOUNCE_CYCLES-2:0], btn_in};
+            
+            // Button is considered pressed only if stable for DEBOUNCE_CYCLES
+            if (&shift)  // All 1's = stable press
+                btn_out <= 1'b1;
+            else if (~|shift)  // All 0's = stable release
+                btn_out <= 1'b0;
+        end
+    end
+endmodule
+
 // LFSR for segment selection
 module rng_lfsr(
     input  wire       clk,
@@ -161,8 +189,21 @@ module tt_um_whack_a_mole(
     wire dp;
     wire game_end;
 
-    // Map inputs: buttons from ui_in[7:0]
-    wire [7:0] btn = ui_in;
+    // Button debouncing
+    wire [7:0] debounced_btns;
+    
+    // Instantiate 8 debouncers, one for each button
+    generate
+        genvar i;
+        for (i = 0; i < 8; i = i + 1) begin : btn_debouncers
+            button_debouncer debouncer (
+                .clk     (clk),
+                .rst_n   (rst_n),
+                .btn_in  (ui_in[i]),
+                .btn_out (debounced_btns[i])
+            );
+        end
+    endgenerate
     
     // Map outputs: 7-segment display to uo_out[6:0] and decimal point to uo_out[7]
     assign uo_out[6:0] = seg;
@@ -181,7 +222,7 @@ module tt_um_whack_a_mole(
         .game_end (game_end)
     );
 
-    assign btn_sync   = btn & ~lockout;
+    assign btn_sync   = debounced_btns & ~lockout;
 
     rng_lfsr    rng_inst(
         .clk       (clk),

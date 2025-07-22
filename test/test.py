@@ -29,12 +29,14 @@ async def test_score_increment(dut):
 
     active_idx = await wait_active(dut)
 
-    # Pulse the correct button
+    # Press button and hold for 5 cycles to pass debouncing
     dut.ui_in.value = 1 << active_idx
-    await RisingEdge(dut.clk)
-    await Timer(1, units='ns')
+    for _ in range(5):  # More than DEBOUNCE_CYCLES
+        await RisingEdge(dut.clk)
     dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+    # Wait a few cycles for FSM to process the debounced press
+    for _ in range(3):
+        await RisingEdge(dut.clk)
 
     score = dut.uio_out.value.integer  # Score LEDs mapped to uio_out
     assert score == 1, f"Expected score 1, got {score}"
@@ -78,10 +80,14 @@ async def test_game_end_display(dut):
     # Score two correct presses
     for _ in range(2):
         idx = await wait_active(dut)
+        # Press button and hold for 5 cycles to pass debouncing
         dut.ui_in.value = 1 << idx
-        await RisingEdge(dut.clk)
-        await Timer(1, units='ns')
+        for _ in range(5):  # More than DEBOUNCE_CYCLES
+            await RisingEdge(dut.clk)
         dut.ui_in.value = 0
+        # Wait a few cycles for FSM to process the debounced press
+        for _ in range(3):
+            await RisingEdge(dut.clk)
 
     score = dut.uio_out.value.integer
     assert score == 2, f"Expected internal score 2, got {score}"
@@ -98,10 +104,55 @@ async def test_game_end_display(dut):
     active_segments = [i for i in range(7) if ((seg_val >> i) & 1) == 0]
     assert len(active_segments) == 1, f"Expected exactly one active segment, got {len(active_segments)}: {active_segments}"
     assert dp == 1, f"Expected dp=1 (game running), got {dp}"
+
+@cocotb.test()
+async def test_button_debounce_filter(dut):
+    """Test that button glitches are filtered out by the debouncer."""
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Get the active segment
+    active_idx = await wait_active(dut)
     
-    # Verify the active segment is valid (0-6)
-    active_idx = active_segments[0]
-    assert 0 <= active_idx <= 6, f"Active segment index {active_idx} is out of range [0-6]"
+    # Create a glitch - button press for only 2 cycles (less than DEBOUNCE_CYCLES)
+    dut.ui_in.value = 1 << active_idx
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    dut.ui_in.value = 0
+    
+    # Wait a few cycles to ensure the glitch is filtered
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+    
+    # Score should still be 0 since the glitch was filtered
+    score = dut.uio_out.value.integer
+    assert score == 0, f"Score changed on glitch: got {score}, expected 0"
+
+@cocotb.test()
+async def test_button_debounce_stable(dut):
+    """Test that stable button presses are registered after debounce period."""
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Get the active segment
+    active_idx = await wait_active(dut)
+    
+    # Press button and hold for 5 cycles (more than DEBOUNCE_CYCLES)
+    dut.ui_in.value = 1 << active_idx
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+    
+    # Release button
+    dut.ui_in.value = 0
+    # Wait a few cycles for FSM to process the debounced press
+    for _ in range(3):
+        await RisingEdge(dut.clk)
+    
+    # Score should increment since press was stable
+    score = dut.uio_out.value.integer
+    assert score == 1, f"Score not incremented after stable press: got {score}, expected 1"
 
 @cocotb.test()
 async def test_game_timer(dut):
@@ -113,11 +164,14 @@ async def test_game_timer(dut):
     # Score some points before timer expires
     for _ in range(3):
         idx = await wait_active(dut)
+        # Press button and hold for 5 cycles to pass debouncing
         dut.ui_in.value = 1 << idx
-        await RisingEdge(dut.clk)
-        await Timer(1, units='ns')
+        for _ in range(5):  # More than DEBOUNCE_CYCLES
+            await RisingEdge(dut.clk)
         dut.ui_in.value = 0
-        await RisingEdge(dut.clk)
+        # Wait a few cycles for FSM to process the debounced press
+        for _ in range(3):
+            await RisingEdge(dut.clk)
 
     # Wait for game to end (simulation mode uses 1500 cycles instead of 15M)
     print(f"Starting timer test at {dut.clk.value}")
