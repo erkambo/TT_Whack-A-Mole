@@ -8,11 +8,18 @@ module tb();
   initial begin
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
+    // Explicitly dump timer signals
+    $dumpvars(0, dut.timer_inst.count);
+    $dumpvars(0, dut.timer_inst.game_end);
+    $dumpvars(0, dut.timer_inst.clk);
+    $dumpvars(0, dut.timer_inst.rst_n);
   end
 
-  // Clock: 50 MHz
+  // Clock: 1 MHz (1000ns period)
   reg clk = 0;
-  always #10 clk = ~clk;
+  initial forever begin
+    #500 clk = ~clk;  // Half period = 500ns
+  end
 
   // DUT inputs: let cocotb manage reset and stimulus
   reg rst_n = 1;
@@ -24,6 +31,7 @@ module tb();
   wire [7:0] uo_out;         // Dedicated outputs (7-segment display)
   wire [7:0] uio_out;        // IOs: Output path (score LEDs)
   wire [7:0] uio_oe;         // IOs: Enable path
+  wire game_end;            // Game end signal
 
   // Instantiate the tt_um_whack_a_mole
   tt_um_whack_a_mole dut (
@@ -36,5 +44,8 @@ module tb();
     .clk        (clk),
     .rst_n      (rst_n)
   );
+
+  // Connect internal game_end signal for testing
+  assign game_end = dut.game_end;
 
 endmodule

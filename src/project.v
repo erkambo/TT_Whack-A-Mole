@@ -70,6 +70,35 @@ module seg7_driver(
     end
 endmodule
 
+// Game Timer module
+module game_timer(
+    input  wire       clk,
+    input  wire       rst_n,
+    output reg        game_end
+);
+    // Synthesis will use this for real hardware
+    reg [24:0] count;  // 24 bits needed for 15M
+    
+    // Define different count targets for simulation vs synthesis
+    `ifdef SIMULATION
+        localparam TARGET_COUNT = 25'd1500;  // Much faster for simulation
+    `else
+        localparam TARGET_COUNT = 25'd15_000_000;  // 15 seconds at 1MHz for real hardware
+    `endif
+    
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            count <= 25'd0;
+            game_end <= 1'b0;
+        end else if (count >= TARGET_COUNT) begin
+            game_end <= 1'b1;
+            count <= count; // Stop counting once we reach the end
+        end else begin
+            count <= count + 1'b1;
+        end
+    end
+endmodule
+
 // Game Control FSM (work in progress)
 module game_fsm(
     input  wire        clk,
@@ -145,8 +174,12 @@ module tt_um_whack_a_mole(
     // Set uio_oe to all outputs (1) since we're using uio_out for score LEDs
     assign uio_oe = 8'b11111111;
     
-    // For now, game always running
-    assign game_end = 1'b0;
+    // Instantiate game timer
+    game_timer timer_inst(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .game_end (game_end)
+    );
 
     assign btn_sync   = btn & ~lockout;
 

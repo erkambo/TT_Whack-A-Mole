@@ -23,7 +23,7 @@ async def wait_active(dut, max_cycles=20):
 @cocotb.test()
 async def test_score_increment(dut):
     """Pressing the active segment button increments the score."""
-    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())  # 1MHz clock
     dut.ui_in.value = 0  # Buttons mapped to ui_in
     await reset_dut(dut)
 
@@ -42,7 +42,7 @@ async def test_score_increment(dut):
 @cocotb.test()
 async def test_no_increment_on_wrong(dut):
     """Pressing a non-active button does not change the score."""
-    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())  # 1MHz clock
 
     dut.ui_in.value = 0
     await reset_dut(dut)
@@ -71,7 +71,7 @@ async def test_no_increment_on_wrong(dut):
 @cocotb.test()
 async def test_game_end_display(dut):
     """Test that the 7-segment display shows the correct active segment pattern during gameplay."""
-    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())  # 1MHz clock
     dut.ui_in.value = 0
     await reset_dut(dut)
 
@@ -102,3 +102,61 @@ async def test_game_end_display(dut):
     # Verify the active segment is valid (0-6)
     active_idx = active_segments[0]
     assert 0 <= active_idx <= 6, f"Active segment index {active_idx} is out of range [0-6]"
+
+@cocotb.test()
+async def test_game_timer(dut):
+    """Test that the game ends after the timer expires and displays the score."""
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())  # Faster clock for simulation
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Score some points before timer expires
+    for _ in range(3):
+        idx = await wait_active(dut)
+        dut.ui_in.value = 1 << idx
+        await RisingEdge(dut.clk)
+        await Timer(1, units='ns')
+        dut.ui_in.value = 0
+        await RisingEdge(dut.clk)
+
+    # Wait for game to end (simulation mode uses 1500 cycles instead of 15M)
+    print(f"Starting timer test at {dut.clk.value}")
+    print("Waiting for timer in simulation mode...")
+    
+    # Wait for 1500 cycles plus margin
+    cycles_per_print = 100  # Print status frequently
+    
+    for i in range(2000):  # Added margin for safety
+        await RisingEdge(dut.clk)
+        if i % cycles_per_print == 0:
+            time_in_sec = i/1_000_000  # Convert cycles to seconds
+            # Print debug info
+            print(f"\nTime elapsed: {time_in_sec:.1f} sec (cycle {i})")
+            print(f"    Clock: {dut.clk.value}")
+            print(f"    Game end: {dut.game_end.value}")
+            print(f"    Score: {dut.uio_out.value.integer}")
+            
+        if dut.game_end.value:
+            print("\nGAME END DETECTED!")
+            print(f"Game ended at {i/1_000_000:.3f} seconds ({i} cycles)")
+            print(f"Final score: {dut.uio_out.value.integer}")
+            
+            # Wait a few cycles to ensure game_end stays high
+            for _ in range(100):
+                await RisingEdge(dut.clk)
+                if not dut.game_end.value:
+                    raise TestFailure("game_end signal dropped after being set")
+            break
+    else:
+        raise TestFailure("Game did not end within expected time")
+
+    # Verify game end state
+    assert dut.game_end.value == 1, "Game should be in end state"
+    
+    # Check that display shows score
+    score = dut.uio_out.value.integer
+    assert score == 3, f"Expected final score 3, got {score}"
+    
+    # Verify decimal point is off in score display mode
+    dp = (dut.uo_out.value.integer >> 7) & 1
+    assert dp == 0, f"Expected dp=0 (game end), got {dp}"
