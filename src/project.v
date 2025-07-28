@@ -1,257 +1,260 @@
 `default_nettype none
 
-// Button debouncer module
-module button_debouncer #(
-    parameter DEBOUNCE_CYCLES = 4  // Number of cycles button must be stable
-)(
-    input  wire       clk,
-    input  wire       rst_n,
-    input  wire       btn_in,    // Raw button input
-    output reg        btn_out    // Debounced output
-);
-    reg [DEBOUNCE_CYCLES-1:0] shift;  // Shift register for debouncing
-    
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            shift <= 0;
-            btn_out <= 1'b0;
-        end else begin
-            // Shift in the new button state
-            shift <= {shift[DEBOUNCE_CYCLES-2:0], btn_in};
-            
-            // Button is considered pressed only if stable for DEBOUNCE_CYCLES
-            if (&shift)  // All 1's = stable press
-                btn_out <= 1'b1;
-            else if (~|shift)  // All 0's = stable release
-                btn_out <= 1'b0;
-        end
-    end
-endmodule
+//-----------------------------------------------------------------------------  
+// Button debouncer module  
+//-----------------------------------------------------------------------------  
+module button_debouncer #(  
+    parameter DEBOUNCE_CYCLES = 4  // Number of cycles button must be stable  
+)(  
+    input  wire clk,  
+    input  wire rst_n,  
+    input  wire btn_in,    // Raw button input  
+    output reg  btn_out    // Debounced output  
+);  
+    reg [DEBOUNCE_CYCLES-1:0] shift;  // Shift register for debouncing  
+    always @(posedge clk or negedge rst_n) begin  
+        if (!rst_n) begin  
+            shift   <= {DEBOUNCE_CYCLES{1'b0}};  
+            btn_out <= 1'b0;  
+        end else begin  
+            shift <= {shift[DEBOUNCE_CYCLES-2:0], btn_in};  
+            if (&shift)        // All 1's = stable press  
+                btn_out <= 1'b1;  
+            else if (~|shift)  // All 0's = stable release  
+                btn_out <= 1'b0;  
+        end  
+    end  
+endmodule  
 
-// LFSR for segment selection
-module rng_lfsr(
-    input  wire       clk,
-    input  wire       rst_n,
-    output reg [2:0]  rand_seg
-);
-    reg [15:0] lfsr;
-    wire feedback = lfsr[0] ^ lfsr[2];
+//-----------------------------------------------------------------------------  
+// LFSR for segment selection  
+//-----------------------------------------------------------------------------  
+module rng_lfsr(  
+    input  wire       clk,  
+    input  wire       rst_n,  
+    output reg [2:0]  rand_seg  
+);  
+    reg [15:0] lfsr;  
+    wire feedback = lfsr[0] ^ lfsr[2];  
+    always @(posedge clk or negedge rst_n) begin  
+        if (!rst_n)  
+            lfsr <= 16'hACE1;  
+        else  
+            lfsr <= {lfsr[14:0], feedback};  
+    end  
+    always @(posedge clk or negedge rst_n) begin  
+        if (!rst_n)  
+            rand_seg <= 3'd0;  
+        else  
+            rand_seg <= lfsr[2:0];  
+    end  
+endmodule  
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            lfsr <= 16'hACE1;
-        else
-            lfsr <= {lfsr[14:0], feedback};
-    end
+//-----------------------------------------------------------------------------  
+// 7-segment display driver  
+//-----------------------------------------------------------------------------  
+module seg7_driver(  
+    input  wire [2:0]  segment_select,  
+    input  wire        game_end,  
+    input  wire [7:0]  score,  
+    output reg  [6:0]  seg,  
+    output reg         dp  
+);  
+    always @(*) begin  
+        if (!game_end) begin  
+            seg = 7'b1111111;  
+            case (segment_select)  
+                3'd0: seg[0] = 1'b0;  
+                3'd1: seg[1] = 1'b0;  
+                3'd2: seg[2] = 1'b0;  
+                3'd3: seg[3] = 1'b0;  
+                3'd4: seg[4] = 1'b0;  
+                3'd5: seg[5] = 1'b0;  
+                3'd6: seg[6] = 1'b0;  
+                default: seg[0] = 1'b0;  
+            endcase  
+            dp = 1'b1;  
+        end else begin  
+            case (score[3:0])  
+                4'h0: seg = 7'b1000000;  
+                4'h1: seg = 7'b1111001;  
+                4'h2: seg = 7'b0100100;  
+                4'h3: seg = 7'b0110000;  
+                4'h4: seg = 7'b0011001;  
+                4'h5: seg = 7'b0010010;  
+                4'h6: seg = 7'b0000010;  
+                4'h7: seg = 7'b1111000;  
+                4'h8: seg = 7'b0000000;  
+                4'h9: seg = 7'b0010000;  
+                4'hA: seg = 7'b0001000;  
+                4'hB: seg = 7'b0000011;  
+                4'hC: seg = 7'b1000110;  
+                4'hD: seg = 7'b0100001;  
+                4'hE: seg = 7'b0000110;  
+                4'hF: seg = 7'b0001110;  
+            endcase  
+            dp = 1'b0;  
+        end  
+    end  
+endmodule  
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            rand_seg <= 3'd0;
-        else
-            rand_seg <= lfsr[2:0];
-    end
-endmodule
+//-----------------------------------------------------------------------------  
+// Countdown Timer with external start control  
+//-----------------------------------------------------------------------------  
+module game_timer(  
+    input  wire       clk,  
+    input  wire       rst_n,  
+    input  wire       start_btn,  
+    output reg        game_end  
+);  
+    reg [24:0] count;  
+    `ifdef SIMULATION  
+        localparam TARGET_COUNT = 25'd1500;  
+    `else  
+        localparam TARGET_COUNT = 25'd15_000_000;  
+    `endif  
+    always @(posedge clk or negedge rst_n) begin  
+        if (!rst_n) begin  
+            count    <= 25'd0;  
+            game_end <= 1'b0;  
+        end else if (start_btn) begin  
+            count    <= 25'd0;  
+            game_end <= 1'b0;  
+        end else if (!game_end) begin  
+            if (count >= TARGET_COUNT) begin  
+                game_end <= 1'b1;  
+            end else begin  
+                count <= count + 1'b1;  
+            end  
+        end  
+    end  
+endmodule  
 
-// 7-segment driver mdoule
-module seg7_driver(
-    input  wire [2:0]  segment_select,
-    input  wire        game_end,
-    input  wire [7:0]  score,
-    output reg  [6:0]  seg,
-    output reg         dp
-);
-    always @(*) begin
-        if (!game_end) begin
-            seg = 7'b1111111;
-            case (segment_select)
-                3'd0: seg[0] = 1'b0;
-                3'd1: seg[1] = 1'b0;
-                3'd2: seg[2] = 1'b0;
-                3'd3: seg[3] = 1'b0;
-                3'd4: seg[4] = 1'b0;
-                3'd5: seg[5] = 1'b0;
-                3'd6: seg[6] = 1'b0;
-                default: seg[0] = 1'b0; // default to segment 0 
-            endcase
-            dp = 1'b1;
-        end else begin
-            case (score[3:0])
-                4'h0: seg = 7'b1000000;
-                4'h1: seg = 7'b1111001;
-                4'h2: seg = 7'b0100100;
-                4'h3: seg = 7'b0110000;
-                4'h4: seg = 7'b0011001;
-                4'h5: seg = 7'b0010010;
-                4'h6: seg = 7'b0000010;
-                4'h7: seg = 7'b1111000;
-                4'h8: seg = 7'b0000000;
-                4'h9: seg = 7'b0010000;
-                4'hA: seg = 7'b0001000;
-                4'hB: seg = 7'b0000011;
-                4'hC: seg = 7'b1000110;
-                4'hD: seg = 7'b0100001;
-                4'hE: seg = 7'b0000110;
-                4'hF: seg = 7'b0001110;
-            endcase
-            dp = 1'b0;
-        end
-    end
-endmodule
+//-----------------------------------------------------------------------------  
+// Game Control FSM with IDLE, NEXT, WAIT, GAME_OVER (auto-start at reset)  
+//-----------------------------------------------------------------------------  
+module game_fsm(  
+    input  wire        clk,  
+    input  wire        rst_n,  
+    input  wire [2:0]  rand_seg,  
+    input  wire [7:0]  btn_sync,  
+    input  wire        start_btn,  
+    input  wire        game_end,  
+    output reg [2:0]   segment_select,  
+    output reg [7:0]   lockout,  
+    output reg [7:0]   score_cnt  
+);  
+    typedef enum reg [1:0] {IDLE, NEXT, WAIT, GAME_OVER} state_t;  
+    state_t state;  
+    reg prev_start;  
+    always @(posedge clk or negedge rst_n) begin  
+        if (!rst_n) begin  
+            state          <= NEXT;           // auto-start on reset  
+            prev_start     <= 1'b0;  
+            lockout        <= 8'd0;  
+            score_cnt      <= 8'd0;  
+            segment_select <= 3'd0;  
+        end else begin  
+            prev_start <= start_btn;  
+            case (state)  
+                IDLE: if (start_btn && !prev_start) begin  
+                    score_cnt      <= 8'd0;  
+                    lockout        <= 8'd0;  
+                    segment_select <= 3'd0;  
+                    state          <= NEXT;  
+                end  
+                NEXT: begin  
+                    segment_select <= (rand_seg==3'd7)?3'd0:rand_seg;  
+                    lockout        <= 8'd0;  
+                    state          <= WAIT;  
+                end  
+                WAIT: begin  
+                    if (game_end)  
+                        state <= GAME_OVER;  
+                    else if (btn_sync[segment_select]) begin  
+                        score_cnt <= score_cnt + 1'b1;  
+                        state     <= NEXT;  
+                    end else if (|btn_sync)  
+                        lockout <= btn_sync;  
+                end  
+                GAME_OVER: begin  
+                    lockout <= 8'hFF;  
+                    if (start_btn && !prev_start)  
+                        state <= NEXT;      // restart  
+                end  
+            endcase  
+        end  
+    end  
+endmodule  
 
-// Game Timer module
-module game_timer(
-    input  wire       clk,
-    input  wire       rst_n,
-    output reg        game_end
-);
-    // Synthesis will use this for real hardware
-    reg [24:0] count;  // 24 bits needed for 15M
-    
-    // Define different count targets for simulation vs synthesis
-    `ifdef SIMULATION
-        localparam TARGET_COUNT = 25'd1500;  // Much faster for simulation
-    `else
-        localparam TARGET_COUNT = 25'd15_000_000;  // 15 seconds at 1MHz for real hardware
-    `endif
-    
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            count <= 25'd0;
-            game_end <= 1'b0;
-        end else if (count >= TARGET_COUNT) begin
-            game_end <= 1'b1;
-            count <= count; // Stop counting once we reach the end
-        end else begin
-            count <= count + 1'b1;
-        end
-    end
-endmodule
-
-// Game Control FSM (work in progress)
-module game_fsm(
-    input  wire        clk,
-    input  wire        rst_n,
-    input  wire [2:0]  rand_seg,
-    input  wire [7:0]  btn_sync,
-    input  wire        game_end,
-    output reg  [2:0]  segment_select,
-    output reg  [7:0]  lockout,
-    output reg  [7:0]  score_cnt
-);
-    typedef enum reg [0:0] { WAIT, NEXT } state_t;
-    state_t state;
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            segment_select <= 3'd0;
-            lockout        <= 8'd0;
-            score_cnt      <= 8'd0;
-            state          <= NEXT;
-        end else if (!game_end) begin
-            case (state)
-                NEXT: begin
-                    // Pick a new segment
-                    segment_select <= (rand_seg == 3'd7) ? 3'd0 : rand_seg;
-                    lockout        <= 8'd0;
-                    state          <= WAIT;
-                end
-                WAIT: begin
-                    if (btn_sync[segment_select]) begin
-                        score_cnt <= score_cnt + 1;
-                        state     <= NEXT;
-                    end else if (|btn_sync) begin
-                        lockout   <= btn_sync;
-                        state     <= WAIT;
-                    end
-                end
-            endcase
-        end
-    end
-endmodule
-
-// whack a mole module top
-module tt_um_whack_a_mole(
-    input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
-    input  wire [7:0] uio_in,   // IOs: Input path
-    output wire [7:0] uio_out,  // IOs: Output path
-    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
-);
-    wire [2:0] rand_seg;
-    wire [2:0] segment_select;
-    wire [7:0] lockout;
-    wire [7:0] score;
-    wire [7:0] btn_sync;
-    wire [6:0] seg;
-    wire dp;
-    wire game_end;
-
-    // Button debouncing
-    wire [7:0] debounced_btns;
-    
-    // Instantiate 8 debouncers, one for each button
-    generate
-        genvar i;
-        for (i = 0; i < 8; i = i + 1) begin : btn_debouncers
-            button_debouncer debouncer (
-                .clk     (clk),
-                .rst_n   (rst_n),
-                .btn_in  (ui_in[i]),
-                .btn_out (debounced_btns[i])
-            );
-        end
-    endgenerate
-    
-    // Map outputs: 7-segment display to uo_out[6:0] and decimal point to uo_out[7]
-    assign uo_out[6:0] = seg;
-    assign uo_out[7] = dp;
-    
-    // Map score LEDs to uio_out[7:0]
-    assign uio_out = score;
-    
-    // Set uio_oe to all outputs (1) since we're using uio_out for score LEDs
-    assign uio_oe = 8'b11111111;
-    
-    // Instantiate game timer
-    game_timer timer_inst(
-        .clk      (clk),
-        .rst_n    (rst_n),
-        .game_end (game_end)
-    );
-
-    assign btn_sync   = debounced_btns & ~lockout;
-
-    rng_lfsr    rng_inst(
-        .clk       (clk),
-        .rst_n     (rst_n),
-        .rand_seg  (rand_seg)
-    );
-
-    game_fsm    fsm_inst(
-        .clk            (clk),
-        .rst_n          (rst_n),
-        .rand_seg       (rand_seg),
-        .btn_sync       (btn_sync),
-        .game_end       (game_end),
-        .segment_select (segment_select),
-        .lockout        (lockout),
-        .score_cnt      (score)
-    );
-
-    seg7_driver drv_inst(
-        .segment_select (segment_select),
-        .game_end       (game_end),
-        .score          (score),
-        .seg            (seg),
-        .dp             (dp)
-    );
-
-    // List all unused inputs to prevent warnings
-    wire _unused = &{ena, 1'b0};
-
-endmodule
+//-----------------------------------------------------------------------------  
+// Top-level: tt_um_whack_a_mole with original ports (uio_in, ena)  
+//-----------------------------------------------------------------------------  
+module tt_um_whack_a_mole(  
+    input  wire [7:0] ui_in,  
+    output wire [7:0] uo_out,  
+    input  wire [7:0] uio_in,  
+    output wire [7:0] uio_out,  
+    output wire [7:0] uio_oe,  
+    input  wire       ena,  
+    input  wire       clk,  
+    input  wire       rst_n  
+);  
+    wire [7:0] deb_btn;  
+    genvar i;  
+    generate  
+      for (i=0; i<8; i=i+1) begin : btn_deb  
+        button_debouncer #(.DEBOUNCE_CYCLES(4)) db (  
+          .clk(clk),  
+          .rst_n(rst_n),  
+          .btn_in(ui_in[i]),  
+          .btn_out(deb_btn[i])  
+        );  
+      end  
+    endgenerate  
+    wire start_btn = deb_btn[0];  
+    wire       game_end;  
+    wire [2:0] rand_seg;  
+    wire [7:0] btn_sync;  
+    wire [2:0] segment_select;  
+    wire [7:0] lockout;  
+    wire [7:0] score;  
+    wire [6:0] seg;  
+    wire       dp;  
+    game_timer timer_inst (  
+        .clk(clk),  
+        .rst_n(rst_n),  
+        .start_btn(start_btn),  
+        .game_end(game_end)  
+    );  
+    rng_lfsr rng_inst (  
+        .clk(clk),  
+        .rst_n(rst_n),  
+        .rand_seg(rand_seg)  
+    );  
+    game_fsm fsm_inst (  
+        .clk(clk),  
+        .rst_n(rst_n),  
+        .rand_seg(rand_seg),  
+        .btn_sync(btn_sync),  
+        .start_btn(start_btn),  
+        .game_end(game_end),  
+        .segment_select(segment_select),  
+        .lockout(lockout),  
+        .score_cnt(score)  
+    );  
+    assign btn_sync = deb_btn & ~lockout;  
+    seg7_driver drv_inst (  
+        .segment_select(segment_select),  
+        .game_end(game_end),  
+        .score(score),  
+        .seg(seg),  
+        .dp(dp)  
+    );  
+    assign uo_out  = {dp, seg};  
+    assign uio_out = score;  
+    assign uio_oe  = 8'hFF;  
+    wire _unused = &{ena, uio_in};  
+endmodule  
 
 `default_nettype wire

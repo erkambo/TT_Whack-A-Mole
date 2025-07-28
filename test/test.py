@@ -214,3 +214,47 @@ async def test_game_timer(dut):
     # Verify decimal point is off in score display mode
     dp = (dut.uo_out.value.integer >> 7) & 1
     assert dp == 0, f"Expected dp=0 (game end), got {dp}"
+
+
+
+@cocotb.test()
+async def test_auto_start_on_reset(dut):
+    """After reset (without pressing start), the game should auto-start and light one segment."""
+    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Immediately after reset, one segment must be active (auto-start)
+    await RisingEdge(dut.clk)
+    seg_val = dut.uo_out.value.integer & 0x7F
+    assert seg_val != 0x7F, f"Segment did not light after reset: {seg_val:07b}"
+
+
+@cocotb.test()
+async def test_restart_after_game_over(dut):
+    """After timer expiry and GAME_OVER, pressing pb0 restarts the game."""
+    cocotb.start_soon(Clock(dut.clk, 20, units='ns').start())
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Spin until the timer fires
+    while not dut.game_end.value:
+        await RisingEdge(dut.clk)
+
+    # Verify GAME_OVER: wrong buttons do nothing
+    active = await wait_active(dut)      # should still cycle, but no scoring
+    wrong = (active + 1) % 8
+    dut.ui_in.value = 1 << wrong
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    assert dut.uio_out.value.integer == 0, "Score changed in GAME_OVER"
+
+    # Now press pb0 to restart
+    dut.ui_in.value = 1 << 0
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+    dut.ui_in.value = 0
+
+    # And you should see a segment light again
+    idx = await wait_active(dut)
+    assert 0 <= idx <= 6, "No segment lit after restart"
