@@ -8,17 +8,17 @@ module tb();
   initial begin
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
-    // Explicitly dump timer signals
+`ifdef RTL_SIM // Only dump internal signals during RTL simulation
+    // Explicitly dump timer and FSM state signals for debugging
     $dumpvars(0, dut.timer_inst.count);
-    $dumpvars(0, dut.timer_inst.game_end);
-    $dumpvars(0, dut.timer_inst.clk);
-    $dumpvars(0, dut.timer_inst.rst_n);
+    $dumpvars(0, dut.fsm_inst.state);
+`endif
   end
 
   // Clock: 1 MHz (1000ns period)
   reg clk = 0;
   initial forever begin
-    #500 clk = ~clk;  // Half period = 500ns
+    #500 clk = ~clk; // Half period = 500ns
   end
 
   // DUT inputs: let cocotb manage reset and stimulus
@@ -28,10 +28,9 @@ module tb();
   reg ena = 1'b1;            // Enable signal
 
   // DUT outputs
-  wire [7:0] uo_out;         // Dedicated outputs (7-segment display)
-  wire [7:0] uio_out;        // IOs: Output path (score LEDs)
-  wire [7:0] uio_oe;         // IOs: Enable path
-  wire game_end;            // Game end signal
+  wire [7:0] uo_out;   // Dedicated outputs (7-segment display)
+  wire [7:0] uio_out;  // IOs: Output path (score LEDs)
+  wire [7:0] uio_oe;   // IOs: Enable path
 
   // Instantiate the tt_um_whack_a_mole
   tt_um_whack_a_mole dut (
@@ -44,8 +43,5 @@ module tb();
     .clk        (clk),
     .rst_n      (rst_n)
   );
-
-  // Connect internal game_end signal for testing
-  assign game_end = dut.game_end;
 
 endmodule
