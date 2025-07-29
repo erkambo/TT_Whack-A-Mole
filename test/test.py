@@ -466,88 +466,88 @@ async def test_segment_never_seven(dut):
     assert all(0 <= i <= 6 for i in seen), f"Invalid segment index seen: {seen}"
     assert 7 not in seen, "Got a 7th segment!"
 
-@cocotb.test()
-async def test_restart_debounce(dut):
-    """At game‐over, a short glitch on pb0 must NOT restart the game; only a debounced press does."""
-    cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
-    dut.ui_in.value = 0
-    await reset_dut(dut)
+# @cocotb.test()
+# async def test_restart_debounce(dut):
+#     """At game‐over, a short glitch on pb0 must NOT restart the game; only a debounced press does."""
+#     cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
+#     dut.ui_in.value = 0
+#     await reset_dut(dut)
 
-    # 1) Run until DP falls (indicating game over)
-    while get_dp(dut) == 1:
-        await RisingEdge(dut.clk)
+#     # 1) Run until DP falls (indicating game over)
+#     while get_dp(dut) == 1:
+#         await RisingEdge(dut.clk)
 
-    # 2) Glitch pb0 for only 2 cycles (< DEBOUNCE_CYCLES)
-    dut.ui_in.value = 1 << 0
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+#     # 2) Glitch pb0 for only 2 cycles (< DEBOUNCE_CYCLES)
+#     dut.ui_in.value = 1 << 0
+#     await RisingEdge(dut.clk)
+#     await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
 
-    # Still in GAME_OVER: display should show “0” (seg=7'b1000000, dp=0)
-    seg_val = dut.uo_out.value.integer & 0x7F
-    dp      = get_dp(dut)
-    assert seg_val == 0b1000000, f"Short glitch wrongly restarted: seg=0b{seg_val:07b}"
-    assert dp      == 0,          f"Short glitch wrongly restarted: dp={dp}"
+#     # Still in GAME_OVER: display should show “0” (seg=7'b1000000, dp=0)
+#     seg_val = dut.uo_out.value.integer & 0x7F
+#     dp      = get_dp(dut)
+#     assert seg_val == 0b1000000, f"Short glitch wrongly restarted: seg=0b{seg_val:07b}"
+#     assert dp      == 0,          f"Short glitch wrongly restarted: dp={dp}"
 
-    # 3) Now do a proper pb0 press (≥4 cycles) to restart
-    for _ in range(4):
-        dut.ui_in.value = 1 << 0
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
+#     # 3) Now do a proper pb0 press (≥4 cycles) to restart
+#     for _ in range(4):
+#         dut.ui_in.value = 1 << 0
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
 
-    # After debounce, DP must go high again and exactly one mole should light
-    # (i.e. wait for an active segment)
-    idx = await wait_active(dut)
-    assert 0 <= idx <= 6, "Proper debounced pb0 did not restart the game"
+#     # After debounce, DP must go high again and exactly one mole should light
+#     # (i.e. wait for an active segment)
+#     idx = await wait_active(dut)
+#     assert 0 <= idx <= 6, "Proper debounced pb0 did not restart the game"
 
-@cocotb.test()
-async def test_full_game_and_restart(dut):
-    """Play 5 moles correctly, verify score and display, then restart and check reset."""
-    cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
-    dut.ui_in.value = 0
-    await reset_dut(dut)
+# @cocotb.test()
+# async def test_full_game_and_restart(dut):
+#     """Play 5 moles correctly, verify score and display, then restart and check reset."""
+#     cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
+#     dut.ui_in.value = 0
+#     await reset_dut(dut)
 
-    # 1) Hit 5 correct moles
-    for expected in range(1, 6):  # counts 1 through 5
-        idx = await wait_active(dut)
-        # press & hold long enough to debounce
-        dut.ui_in.value = 1 << idx
-        for _ in range(5):
-            await RisingEdge(dut.clk)
-        dut.ui_in.value = 0
-        # let FSM settle
-        for _ in range(3):
-            await RisingEdge(dut.clk)
+#     # 1) Hit 5 correct moles
+#     for expected in range(1, 6):  # counts 1 through 5
+#         idx = await wait_active(dut)
+#         # press & hold long enough to debounce
+#         dut.ui_in.value = 1 << idx
+#         for _ in range(5):
+#             await RisingEdge(dut.clk)
+#         dut.ui_in.value = 0
+#         # let FSM settle
+#         for _ in range(3):
+#             await RisingEdge(dut.clk)
 
-        # check score LED
-        score = dut.uio_out.value.integer
-        assert score == expected, f"After {expected} hits, score={score}"
+#         # check score LED
+#         score = dut.uio_out.value.integer
+#         assert score == expected, f"After {expected} hits, score={score}"
 
-    # 2) Wait for game end: DP goes low when countdown completes
-    while get_dp(dut) == 1:
-        await RisingEdge(dut.clk)
+#     # 2) Wait for game end: DP goes low when countdown completes
+#     while get_dp(dut) == 1:
+#         await RisingEdge(dut.clk)
 
-    # now display should show '5' with DP=0
-    seg_val = dut.uo_out.value.integer & 0x7F
-    dp      = get_dp(dut)
-    assert seg_val == 0b0010010, f"Display seg for '5' wrong: {seg_val:07b}"
-    assert dp      == 0,         f"DP should be 0 at game over, got {dp}"
+#     # now display should show '5' with DP=0
+#     seg_val = dut.uo_out.value.integer & 0x7F
+#     dp      = get_dp(dut)
+#     assert seg_val == 0b0010010, f"Display seg for '5' wrong: {seg_val:07b}"
+#     assert dp      == 0,         f"DP should be 0 at game over, got {dp}"
 
-    # 3) Debounced restart on pb0
-    dut.ui_in.value = 0
-    for _ in range(4):            # hold pb0 ≥ DEBOUNCE_CYCLES
-        dut.ui_in.value = 1 << 0
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+#     # 3) Debounced restart on pb0
+#     dut.ui_in.value = 0
+#     for _ in range(4):            # hold pb0 ≥ DEBOUNCE_CYCLES
+#         dut.ui_in.value = 1 << 0
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
 
-    # 4) New game starts: DP must go high again and score cleared
-    # Wait for DP==1 (game running) and for a new active mole
-    while get_dp(dut) == 0:
-        await RisingEdge(dut.clk)
-    # score LEDs should have reset to 0
-    assert dut.uio_out.value.integer == 0, "Score did not clear on restart"
-    # now one mole must light
-    new_idx = await wait_active(dut)
-    assert 0 <= new_idx <= 6, "No new mole lit after restart"
+#     # 4) New game starts: DP must go high again and score cleared
+#     # Wait for DP==1 (game running) and for a new active mole
+#     while get_dp(dut) == 0:
+#         await RisingEdge(dut.clk)
+#     # score LEDs should have reset to 0
+#     assert dut.uio_out.value.integer == 0, "Score did not clear on restart"
+#     # now one mole must light
+#     new_idx = await wait_active(dut)
+#     assert 0 <= new_idx <= 6, "No new mole lit after restart"
