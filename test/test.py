@@ -11,14 +11,18 @@ async def reset_dut(dut):
     await RisingEdge(dut.clk)
 
 async def wait_active(dut, max_cycles=20):
-    """Wait until a segment lights (one seg bit == 0), return its index."""
+    """Wait until dp==1 and exactly one segment bit==0, then return its index."""
     for _ in range(max_cycles):
         await RisingEdge(dut.clk)
-        seg_val = dut.uo_out.value.integer & 0x7F  # Get 7-segment display bits [6:0]
-        zeros = [i for i in range(7) if ((seg_val >> i) & 1) == 0]
-        if zeros:
+        uo = dut.uo_out.value.integer
+        dp = (uo >> 7) & 1
+        if dp != 1:
+            continue
+        seg = uo & 0x7F
+        zeros = [i for i in range(7) if ((seg >> i) & 1) == 0]
+        if len(zeros) == 1:
             return zeros[0]
-    raise TestFailure(f"No active segment within {max_cycles} cycles; last seg=0b{seg_val:07b}")
+    raise TestFailure(f"No active gameplay segment within {max_cycles} cycles; last uo=0b{uo:08b}")
 
 def get_dp(dut):
     """Return the decimal-point bit: 1 while playing, 0 when game over."""
@@ -251,7 +255,7 @@ async def test_restart_after_game_over(dut):
     idx = await wait_active(dut)
     assert get_dp(dut) == 1, "dp did not return to 1 after restart"
     assert 0 <= idx <= 6,       "No new mole lit after GAME_OVER restart"
-    
+
 @cocotb.test()
 async def test_one_second_lockout(dut):
     """Verify that after wrong-press lockout lasts ~1s, then clears."""
