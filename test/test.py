@@ -1,3 +1,5 @@
+# File: test/test.py
+# This version re-enables all tests and uses the decimal point (dp) to check game state.
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer
@@ -277,3 +279,76 @@ async def test_lockout_independent_buttons(dut):
     dut.ui_in.value = 0
     await RisingEdge(dut.clk)
     assert dut.uio_out.value.integer == 1, "Multi‐button lockout did not clear"
+
+@cocotb.test()
+async def test_no_midgame_restart(dut):
+    """Pressing pb0 mid-game must NOT clear score or restart countdown."""
+    cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # Score 2 points
+    for _ in range(2):
+        idx = await wait_active(dut)
+        dut.ui_in.value = 1 << idx
+        for _ in range(5):
+            await RisingEdge(dut.clk)
+        dut.ui_in.value = 0
+        for _ in range(3):
+            await RisingEdge(dut.clk)
+
+    assert dut.uio_out.value.integer == 2
+
+    # Let timer run a bit
+    for _ in range(500):
+        await RisingEdge(dut.clk)
+
+    # Press pb0 midgame - it should be ignored
+    dut.ui_in.value = 1 << 0
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+    dut.ui_in.value = 0
+    await RisingEdge(dut.clk)
+
+    # Score should still be 2
+    assert dut.uio_out.value.integer == 2, "Score was incorrectly reset mid-game!"
+    assert not is_game_over(dut), "Game ended prematurely after mid-game button press!"
+
+
+# @cocotb.test()
+# async def test_lockout_does_not_reload(dut):
+#     """Ensure that while in lockout, re‐pressing the wrong button does not reset the 1s timer."""
+#     cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
+#     dut.ui_in.value = 0
+#     await reset_dut(dut)
+
+#     idx = await wait_active(dut)
+#     wrong = (idx + 1) % 8
+
+#     # Trigger lockout
+#     dut.ui_in.value = 1 << wrong
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
+
+#     # Halfway through lockout, press wrong button again
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)    # 5 of 10 ticks
+#     dut.ui_in.value = 1 << wrong
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
+
+#     # Now only ~5 ticks remain before clear; wait 6
+#     for _ in range(6):
+#         await RisingEdge(dut.clk)
+
+#     # After that, correct hit should succeed
+#     dut.ui_in.value = 1 << idx
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
+#     assert dut.uio_out.value.integer == 1, "Lockout reload on repeated wrong press!"

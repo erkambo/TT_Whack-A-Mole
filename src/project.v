@@ -180,7 +180,7 @@ module game_fsm(
                 end
 
                 WAIT: begin
-                    // This is the final corrected logic block
+                    // State transitions have priority
                     if (game_end) begin
                         state <= GAME_OVER;
                     end else if (btn_sync[segment_select]) begin
@@ -191,16 +191,13 @@ module game_fsm(
                         // 2. Mid-game restart is next priority
                         score_cnt <= 8'd0;
                         state     <= NEXT;
-                    end else if (|btn_sync) begin
-                        // 3. Wrong hit is next. Only trigger if not already locked out.
-                        if (lock_timer == 0) begin 
-                            lock_timer <= LOCK_CYCLES;
-                            lockout <= lockout | btn_sync; // Set lockout mask on first wrong press
-                        end
-                        // If lock_timer is already running, do nothing.
+                    end else if (|btn_sync && lock_timer == 0 && lockout == 0) begin
+                        // 3. Wrong hit only starts lockout if timer is not running AND lockout is fully cleared
+                        lock_timer <= LOCK_CYCLES;
+                        lockout    <= btn_sync; // Use '=' instead of '|' to prevent accumulating old presses
                     end
 
-                    // Lockout timer decrement runs in parallel with the logic above
+                    // Lockout timer decrement runs in parallel
                     if (lock_timer > 0) begin
                         lock_timer <= lock_timer - 1;
                         if (lock_timer == 1) begin // Clear lockout on the last tick
