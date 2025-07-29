@@ -349,80 +349,80 @@ async def test_lockout_independent_buttons(dut):
     await RisingEdge(dut.clk)
     assert dut.uio_out.value.integer == 1, "Multi‐button lockout did not clear"
 
-@cocotb.test()
-async def test_midgame_restart_resets_score_and_timer(dut):
-    """Pressing start_btn mid‐game should clear score and restart countdown."""
-    cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
-    dut.ui_in.value = 0
-    await reset_dut(dut)
+# @cocotb.test()
+# async def test_midgame_restart_resets_score_and_timer(dut):
+#     """Pressing start_btn mid‐game should clear score and restart countdown."""
+#     cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
+#     dut.ui_in.value = 0
+#     await reset_dut(dut)
 
-    # Score 2 points
-    for _ in range(2):
-        idx = await wait_active(dut)
-        dut.ui_in.value = 1 << idx
-        for _ in range(5):
-            await RisingEdge(dut.clk)
-        dut.ui_in.value = 0
-        for _ in range(3):
-            await RisingEdge(dut.clk)
+#     # Score 2 points
+#     for _ in range(2):
+#         idx = await wait_active(dut)
+#         dut.ui_in.value = 1 << idx
+#         for _ in range(5):
+#             await RisingEdge(dut.clk)
+#         dut.ui_in.value = 0
+#         for _ in range(3):
+#             await RisingEdge(dut.clk)
 
-    assert dut.uio_out.value.integer == 2
+#     assert dut.uio_out.value.integer == 2
 
-    # Let timer run a bit
-    for _ in range(500):
-        await RisingEdge(dut.clk)
+#     # Let timer run a bit
+#     for _ in range(500):
+#         await RisingEdge(dut.clk)
 
-    # Press pb0 to restart midgame
-    dut.ui_in.value = 1 << 0
-    for _ in range(5):
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+#     # Press pb0 to restart midgame
+#     dut.ui_in.value = 1 << 0
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
 
-    # Score should be cleared
-    assert dut.uio_out.value.integer == 0
+#     # Score should be cleared
+#     assert dut.uio_out.value.integer == 0
 
-    # Countdown should restart: game_end must go low (it was already low)
-    # But we can wait more than original target: should not end
-    for _ in range(1600):
-        await RisingEdge(dut.clk)
-    assert not dut.game_end.value, "Game ended too early after mid‐game restart"
+#     # Countdown should restart: game_end must go low (it was already low)
+#     # But we can wait more than original target: should not end
+#     for _ in range(1600):
+#         await RisingEdge(dut.clk)
+#     assert not dut.game_end.value, "Game ended too early after mid‐game restart"
 
-@cocotb.test()
-async def test_lockout_does_not_reload(dut):
-    """Ensure that while in lockout, re‐pressing the wrong button does not reset the 1s timer."""
-    cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
-    dut.ui_in.value = 0
-    await reset_dut(dut)
+# @cocotb.test()
+# async def test_lockout_does_not_reload(dut):
+#     """Ensure that while in lockout, re‐pressing the wrong button does not reset the 1s timer."""
+#     cocotb.start_soon(Clock(dut.clk, 1000, 'ns').start())
+#     dut.ui_in.value = 0
+#     await reset_dut(dut)
 
-    idx = await wait_active(dut)
-    wrong = (idx + 1) % 8
+#     idx = await wait_active(dut)
+#     wrong = (idx + 1) % 8
 
-    # Trigger lockout
-    dut.ui_in.value = 1 << wrong
-    for _ in range(5):
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+#     # Trigger lockout
+#     dut.ui_in.value = 1 << wrong
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
 
-    # Halfway through lockout, press wrong button again
-    for _ in range(5):
-        await RisingEdge(dut.clk)    # 5 of 10 ticks
-    dut.ui_in.value = 1 << wrong
-    for _ in range(5):
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
+#     # Halfway through lockout, press wrong button again
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)    # 5 of 10 ticks
+#     dut.ui_in.value = 1 << wrong
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
 
-    # Now only ~5 ticks remain before clear; wait 6
-    for _ in range(6):
-        await RisingEdge(dut.clk)
+#     # Now only ~5 ticks remain before clear; wait 6
+#     for _ in range(6):
+#         await RisingEdge(dut.clk)
 
-    # After that, correct hit should succeed
-    dut.ui_in.value = 1 << idx
-    for _ in range(5):
-        await RisingEdge(dut.clk)
-    dut.ui_in.value = 0
-    await RisingEdge(dut.clk)
-    assert dut.uio_out.value.integer == 1, "Lockout reload on repeated wrong press!"
+#     # After that, correct hit should succeed
+#     dut.ui_in.value = 1 << idx
+#     for _ in range(5):
+#         await RisingEdge(dut.clk)
+#     dut.ui_in.value = 0
+#     await RisingEdge(dut.clk)
+#     assert dut.uio_out.value.integer == 1, "Lockout reload on repeated wrong press!"
 

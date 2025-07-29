@@ -13,7 +13,7 @@ ifneq ($(GATES),yes)
 SIM_BUILD               = sim_build/rtl
 VERILOG_SOURCES += $(addprefix $(SRC_DIR)/,$(PROJECT_SOURCES))
 COMPILE_ARGS    += -DSIMULATION  # Enable simulation mode
-COMPILE_ARGS    += -DRTL_SIM     # <--- ADD THIS LINE
+COMPILE_ARGS    += -DRTL_SIM     # Define macro for RTL-specific testbench code
 
 else
 

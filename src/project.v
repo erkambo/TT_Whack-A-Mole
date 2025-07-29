@@ -108,16 +108,11 @@ module game_timer(
     output reg        game_end
 );
     reg [24:0] count;
-
-    // allow an override for simulation without touching the "1500" default
-`ifdef SIM_TARGET_COUNT
-    localparam TARGET_COUNT = `SIM_TARGET_COUNT;
-`elsif SIMULATION
-    localparam TARGET_COUNT = 25'd1500;
-`else
-    localparam TARGET_COUNT = 25'd15_000_000;
-`endif
-
+    `ifdef SIMULATION
+        localparam TARGET_COUNT = 25'd1500;
+    `else
+        localparam TARGET_COUNT = 25'd15_000_000;
+    `endif
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             count    <= 25'd0;
@@ -150,12 +145,13 @@ module game_fsm(
 );
     typedef enum reg [1:0] {IDLE, NEXT, WAIT, GAME_OVER} state_t;
     state_t state;
+    // 1-second lockout counter
     reg [19:0] lock_timer;
-`ifdef SIMULATION
-    localparam LOCK_CYCLES = 20'd10;      // 10 cycles for sim
-`else
-    localparam LOCK_CYCLES = 20'd1000000; // ≈1s at 1MHz
-`endif
+    `ifdef SIMULATION
+        localparam LOCK_CYCLES = 20'd10;      // 10 cycles for sim
+    `else
+        localparam LOCK_CYCLES = 20'd1000000; // ≈1s at 1MHz
+    `endif
     reg prev_start;
 
     always @(posedge clk or negedge rst_n) begin
@@ -184,39 +180,42 @@ module game_fsm(
                 end
 
                 WAIT: begin
+                    // This is the final corrected logic block
                     if (game_end) begin
                         state <= GAME_OVER;
-                    end
-                    else if (btn_sync[segment_select]) begin
-                        // Correct hit
+                    end else if (btn_sync[segment_select]) begin
+                        // 1. Correct hit is highest priority
                         score_cnt <= score_cnt + 1;
                         state     <= NEXT;
-                    end
-                    else if (start_btn && !prev_start) begin
-                        // Mid‐game restart
+                    end else if (start_btn && !prev_start) begin
+                        // 2. Mid-game restart is next priority
                         score_cnt <= 8'd0;
                         state     <= NEXT;
-                    end
-                    else if (|btn_sync) begin
-                        // Wrong hit: only load timer if it's not already running
-                        if (lock_timer == 0) begin
+                    end else if (|btn_sync) begin
+                        // 3. Wrong hit is next. Only trigger if not already locked out.
+                        if (lock_timer == 0) begin 
                             lock_timer <= LOCK_CYCLES;
+                            lockout <= lockout | btn_sync; // Set lockout mask on first wrong press
                         end
-                        lockout <= lockout | btn_sync;
+                        // If lock_timer is already running, do nothing.
                     end
 
-                    // decrement the lockout timer
+                    // Lockout timer decrement runs in parallel with the logic above
                     if (lock_timer > 0) begin
                         lock_timer <= lock_timer - 1;
-                        if (lock_timer == 1)
+                        if (lock_timer == 1) begin // Clear lockout on the last tick
                             lockout <= 8'd0;
+                        end
                     end
                 end
 
                 GAME_OVER: begin
                     lockout <= 8'hFF;
-                    if (start_btn && !prev_start)
+                    if (start_btn && !prev_start) begin
+                        // Reset score when restarting from game over
+                        score_cnt <= 8'd0;
                         state <= NEXT;
+                    end
                 end
             endcase
         end

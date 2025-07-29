@@ -44,4 +44,8 @@ module tb();
     .rst_n      (rst_n)
   );
 
+  // Expose game_end to top-level for cocotb
+  wire game_end;
+  assign game_end = dut.game_end;
+
 endmodule
