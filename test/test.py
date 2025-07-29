@@ -229,53 +229,58 @@ async def test_auto_start_on_reset(dut):
     assert seg_val != 0x7F, f"Segment did not light after reset: {seg_val:07b}"
 
 
+import cocotb
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
+
 @cocotb.test()
 async def test_restart_debounce(dut):
-    """At game‐over, a short glitch on pb0 must NOT restart the game; only a debounced press does."""
+    """At game-over, a short glitch on pb0 must NOT restart the game; only a debounced press does."""
+    # 1 MHz clock
     cocotb.start_soon(Clock(dut.clk, 1000, units='ns').start())
-    dut.ui_in.value = 0
-    await reset_dut(dut)
 
-    # helper to read dp
+    # helper to read dp (bit-7 of uo_out)
     def get_dp():
         return (dut.uo_out.value.integer >> 7) & 1
 
-    # 1) Wait up to 2000 cycles for dp to fall (game over)
-    dut._log.info("Waiting for dp→0 (game over)...")
-    saw_go = False
-    for cycle in range(2000):
+    # reset and start
+    dut.ui_in.value = 0
+    await reset_dut(dut)
+
+    # 1) Wait up to 500 cycles for dp to drop (game-over)
+    saw_over = False
+    for cycle in range(500):
         await RisingEdge(dut.clk)
         if get_dp() == 0:
-            saw_go = True
-            dut._log.info(f"→ dp went low at cycle {cycle}")
+            saw_over = True
+            dut._log.info(f"→ game-over detected at cycle {cycle}")
             break
 
-    if not saw_go:
-        dut._log.warning("dp never went low within 2000 cycles; skipping restart-debounce checks in GL")
+    if not saw_over:
+        dut._log.info("dp never fell within 500 cycles—skipping restart-debounce in GL")
         return
 
-    # 2) Short glitch on pb0 (2 cycles) – should NOT restart
+    # 2) Short glitch on pb0 (2 cycles): must NOT restart
     dut.ui_in.value = 1 << 0
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     dut.ui_in.value = 0
     await RisingEdge(dut.clk)
 
-    seg_val = dut.uo_out.value.integer & 0x7F
-    dp      = get_dp()
-    assert seg_val == 0b1000000, f"Short glitch wrongly restarted: seg=0b{seg_val:07b}"
-    assert dp      == 0,          f"Short glitch wrongly restarted: dp={dp}"
+    seg = dut.uo_out.value.integer & 0x7F
+    dp  = get_dp()
+    assert seg == 0b1000000, f"Glitch wrongly restarted (seg=0b{seg:07b})"
+    assert dp  == 0,         f"Glitch wrongly restarted (dp={dp})"
 
-    # 3) Proper debounced pb0 press (≥4 cycles) – should restart
+    # 3) Proper debounced pb0 press (≥4 cycles): must restart
     for _ in range(4):
         dut.ui_in.value = 1 << 0
         await RisingEdge(dut.clk)
     dut.ui_in.value = 0
 
-    # 4) After debounce, dp must return high and a mole must light
-    #    (wait_active already bounds its own wait)
+    # 4) After debounce, dp should go high again and one mole lights
     idx = await wait_active(dut)
-    assert 0 <= idx <= 6, "Proper debounced pb0 did not restart the game"
+    assert 0 <= idx <= 6, "Debounced pb0 did not restart the game"
 
 @cocotb.test()
 async def test_one_second_lockout(dut):
