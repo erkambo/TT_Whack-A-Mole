@@ -254,8 +254,7 @@ module tt_um_whack_a_mole(
     output wire [7:0] uio_oe,  
     input  wire       ena,  
     input  wire       clk,  
-    input  wire       rst_n,
-    output wire       game_end 
+    input  wire       rst_n  
 );  
     wire [7:0] deb_btn;  
     genvar i;  
@@ -270,6 +269,7 @@ module tt_um_whack_a_mole(
         end  
     endgenerate  
     wire start_btn = deb_btn[0];  
+    wire       game_end;  
     wire [2:0] rand_seg;  
     wire [7:0] btn_sync;  
     wire [2:0] segment_select;  

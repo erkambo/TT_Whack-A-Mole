@@ -8,28 +8,26 @@ module tb();
   initial begin
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
-    // Dump the internal timer for visibility
-    $dumpvars(0, dut.timer_inst.count);
-    $dumpvars(0, dut.timer_inst.game_end);
   end
 
   // Clock: 1 MHz (1000ns period)
   reg clk = 0;
-  initial forever #500 clk = ~clk;  // Half period = 500ns
+  initial forever begin
+    #500 clk = ~clk;  // Half period = 500ns
+  end
 
-  // DUT inputs: cocotb will drive these
-  reg        rst_n  = 1;
-  reg  [7:0] ui_in  = 8'd0;    // Buttons
-  reg  [7:0] uio_in = 8'd0;    // Unused in this design
-  reg        ena    = 1'b1;    // Always enabled
+  // DUT inputs: let cocotb manage reset and stimulus
+  reg rst_n = 1;
+  reg [7:0] ui_in = 8'd0;    // Dedicated inputs (buttons)
+  reg [7:0] uio_in = 8'd0;   // IOs: Input path
+  reg ena = 1'b1;            // Enable signal
 
   // DUT outputs
-  wire [7:0] uo_out;           // 7-segment + DP
-  wire [7:0] uio_out;          // Score LEDs
-  wire [7:0] uio_oe;           // Always 1’s
-  wire       game_end;         // Exposed end‐of‐game flag
+  wire [7:0] uo_out;         // Dedicated outputs (7-segment display)
+  wire [7:0] uio_out;        // IOs: Output path (score LEDs)
+  wire [7:0] uio_oe;         // IOs: Enable path
 
-  // Instantiate the DUT, now with game_end exposed
+  // Instantiate the tt_um_whack_a_mole
   tt_um_whack_a_mole dut (
     .ui_in      (ui_in),
     .uo_out     (uo_out),
@@ -38,10 +36,7 @@ module tb();
     .uio_oe     (uio_oe),
     .ena        (ena),
     .clk        (clk),
-    .rst_n      (rst_n),
-    .game_end   (game_end)
+    .rst_n      (rst_n)
   );
 
 endmodule
-
-`default_nettype wire
