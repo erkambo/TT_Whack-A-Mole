@@ -132,7 +132,6 @@ endmodule
 //-----------------------------------------------------------------------------  
 // Game Control FSM with IDLE, NEXT, WAIT, GAME_OVER and 1s lockout timer  
 //-----------------------------------------------------------------------------  
-
 module game_fsm(  
     input  wire        clk,  
     input  wire        rst_n,  
@@ -146,92 +145,64 @@ module game_fsm(
 );  
     typedef enum reg [1:0] {IDLE, NEXT, WAIT, GAME_OVER} state_t;  
     state_t state;  
-
-    // 1 s lockout counter  
+    // 1-second lockout counter  
     reg [19:0] lock_timer;  
     `ifdef SIMULATION  
-      localparam LOCK_CYCLES = 20'd10;       // sim‐fast  
+        localparam LOCK_CYCLES = 20'd10;      // 10 cycles for sim  
     `else  
-      localparam LOCK_CYCLES = 20'd1000000;  // ≈1 s @1 MHz  
+        localparam LOCK_CYCLES = 20'd1000000; // 1e6 cycles ≈1s at 1MHz  
     `endif  
-
-    // Edge detect on start_btn  
     reg prev_start;  
-    wire start_edge = start_btn && !prev_start;  
-
     always @(posedge clk or negedge rst_n) begin  
-      if (!rst_n) begin  
-        // auto‐start after reset  
-        state          <= NEXT;  
-        prev_start     <= 1'b0;  
-        lockout        <= 8'd0;  
-        score_cnt      <= 8'd0;  
-        segment_select <= 3'd0;  
-        lock_timer     <= 20'd0;  
-      end else begin  
-        prev_start <= start_btn;   // track pb0  
-
-        case (state)  
-          IDLE: begin  
-            if (start_edge) begin  
-              // fresh start  
-              score_cnt      <= 8'd0;  
-              lockout        <= 8'd0;  
-              segment_select <= 3'd0;  
-              lock_timer     <= 20'd0;  
-              state          <= NEXT;  
-            end  
-          end  
-
-          NEXT: begin  
-            // pick a new segment  
-            segment_select <= (rand_seg == 3'd7) ? 3'd0 : rand_seg;  
+        if (!rst_n) begin  
+            state          <= NEXT;  
+            prev_start     <= 1'b0;  
             lockout        <= 8'd0;  
+            score_cnt      <= 8'd0;  
+            segment_select <= 3'd0;  
             lock_timer     <= 20'd0;  
-            state          <= WAIT;  
-          end  
-
-          WAIT: begin  
-            // tick down any active penalty  
-            if (lock_timer != 20'd0) begin  
-              lock_timer <= lock_timer - 1;  
-              if (lock_timer == 20'd1)  
-                lockout <= 8'd0;  
-            end  
-
-            // game end?  
-            if (game_end) begin  
-              state <= GAME_OVER;  
-            end  
-            // correct hit?  
-            else if (btn_sync[segment_select]) begin  
-              score_cnt <= score_cnt + 1;  
-              state     <= NEXT;  
-            end  
-            // wrong hit & no current penalty => load lockout  
-            else if (|btn_sync && lock_timer == 20'd0) begin  
-              lockout    <= btn_sync;  
-              lock_timer <= LOCK_CYCLES;  
-            end  
-          end  
-
-          GAME_OVER: begin  
-            // full‐board lock  
-            lockout <= 8'hFF;  
-            if (start_edge) begin  
-              // restart  
-              score_cnt      <= 8'd0;  
-              lockout        <= 8'd0;  
-              segment_select <= 3'd0;  
-              lock_timer     <= 20'd0;  
-              state          <= NEXT;  
-            end  
-          end  
-        endcase  
-      end  
+        end else begin  
+            prev_start <= start_btn;  
+            case (state)  
+                IDLE: if (start_btn && !prev_start) begin  
+                    score_cnt      <= 8'd0;  
+                    lockout        <= 8'd0;  
+                    segment_select <= 3'd0;  
+                    state          <= NEXT;  
+                end  
+                NEXT: begin  
+                    segment_select <= (rand_seg==3'd7)?3'd0:rand_seg;  
+                    lockout        <= 8'd0;  
+                    lock_timer     <= 20'd0;  
+                    state          <= WAIT;  
+                end  
+                WAIT: begin  
+                    // decrement lockout timer  
+                    if (lock_timer != 20'd0) begin  
+                        lock_timer <= lock_timer - 1'b1;  
+                        if (lock_timer == 20'd1)  
+                            lockout <= 8'd0;  
+                    end  
+                    // transitions  
+                    if (game_end)  
+                        state <= GAME_OVER;  
+                    else if (btn_sync[segment_select]) begin  
+                        score_cnt <= score_cnt + 1;  
+                        state     <= NEXT;  
+                    end else if (|btn_sync) begin  
+                        lockout    <= btn_sync;  
+                        lock_timer <= LOCK_CYCLES;  
+                    end  
+                end  
+                GAME_OVER: begin  
+                    lockout <= 8'hFF;  
+                    if (start_btn && !prev_start)  
+                        state <= NEXT;  
+                end  
+            endcase  
+        end  
     end  
 endmodule  
-
 
 //-----------------------------------------------------------------------------  
 // Top-level: tt_um_whack_a_mole with original ports (uio_in, ena)  
