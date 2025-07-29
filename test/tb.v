@@ -9,10 +9,10 @@ module tb();
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
     // Explicitly dump timer signals
-    $dumpvars(0, dut.timer_inst.count);
-    $dumpvars(0, dut.timer_inst.game_end);
-    $dumpvars(0, dut.timer_inst.clk);
-    $dumpvars(0, dut.timer_inst.rst_n);
+    // $dumpvars(0, dut.timer_inst.count);
+    // $dumpvars(0, dut.timer_inst.game_end);
+    // $dumpvars(0, dut.timer_inst.clk);
+    // $dumpvars(0, dut.timer_inst.rst_n);
   end
 
   // Clock: 1 MHz (1000ns period)
